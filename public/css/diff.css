@@ -773,10 +773,42 @@ html.is-loading body::after {
 }
 
 .tree-header {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
   font-size: 12px;
   font-weight: 600;
   color: var(--fgColor-muted, #59636e);
   padding: 4px 8px 8px;
+}
+
+.tree-filter {
+  width: 100%;
+  box-sizing: border-box;
+  margin: 0;
+  padding: 4px 8px;
+  border: 1px solid var(--borderColor-default, #d1d9e0);
+  border-radius: 6px;
+  background-color: var(--bgColor-default, #fff);
+  color: var(--fgColor-default, #1f2328);
+  font: inherit;
+  font-weight: 400;
+}
+
+.tree-filter:focus {
+  outline: 2px solid var(--borderColor-accent-emphasis, #0969da);
+  outline-offset: -1px;
+}
+
+.tree-filter-empty {
+  padding: 8px;
+  color: var(--fgColor-muted, #59636e);
+  font-size: 12px;
+}
+
+.tree-row.is-filtered-out,
+.tree-dir.is-filtered-out {
+  display: none;
 }
 
 .tree-row {

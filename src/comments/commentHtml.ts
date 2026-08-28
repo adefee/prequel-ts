@@ -30,6 +30,7 @@ const COMMENT_HTML = {
     'i',
     's',
     'del',
+    'ins',
     'table',
     'thead',
     'tbody',

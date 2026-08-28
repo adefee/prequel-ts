@@ -4,13 +4,9 @@
 
 A TypeScript fork of [mdesjardins/prequel](https://github.com/mdesjardins/prequel). Same idea: a local web app that renders a Git repo's diff in a UI that looks like GitHub's Pull Request **Files changed** tab, with comments you can hand to Claude. This fork adds multi-project tabs, branch picking, and tighter git/security behavior.
 
-<img width="1285" height="718" alt="Screen Shot 2026-08-11 at 11 40 30" src="https://github.com/user-attachments/assets/67adea24-2a1b-4fb2-921c-73618fe2a273" />
+<img width="1285" alt="prequel-ts Files changed review" src="public/prequel-ts-screenshot.png" />
 
-## Why
-
-If you review code through GitHub's pull request UI, that layout is comfortable — it puts your brain in a mode that can evaluate and comment efficiently. In the day of agentic coding, that can mean pushing a branch just so you can review it before telling Claude what to change.
-
-Prequel is a local simulator of that interface: a branch into its base, plus staged, unstaged, or untracked files. You comment on the diff and either export those comments or let Claude Code work them through the running server.
+<img width="1285" alt="prequel-ts branch picker" src="public/prequel-ts-branch-choice-screenshot.png" />
 
 ## What's different in this fork
 
@@ -18,7 +14,9 @@ Prequel is a local simulator of that interface: a branch into its base, plus sta
 
 **pnpm 11+.** Dependencies are installed with pnpm 11 (not Bun as the package manager). Settings live in `pnpm-workspace.yaml`: minimum release age, store integrity checks, and no unapproved lifecycle/build scripts.
 
-**Several projects at once.** Click the header path to open a different repo in *this* tab. The caret next to it saves and lists bookmarked paths (localStorage). One running server backs many browser tabs: each tab carries its own `?repo=<path>`, so switching a tab does not change the others.
+**Change target path in UI, server supports multiple instances/tabs on different paths**  Click the header path to open a different repo in *this* tab. The caret next to it saves and lists bookmarked paths (localStorage). One running server backs many browser tabs: each tab carries its own `?repo=<path>`, so switching a tab does not change the others.
+
+**File filter.** The file tree has a search box that filters the changed-file list as you type (substring match on the path). Empty folders drop out; Escape clears the query.
 
 **Branch compare.** The header pills list local branches. You can pick any local branch as the head or the base (`?head=` / `?base=`) without checking anything out. All / Branch / Working are consistent with that choice: the working-tree overlay only applies when the selected head *is* the checkout; comparing another branch stays a committed-ref diff. When the head is not checked out, the header says so.
 
@@ -32,7 +30,7 @@ The original still applies: split/unified views, system light/dark (or `?mode=`)
 
 ## Install
 
-This fork is not the `@mdesjardins/prequel` npm package. Run it from a clone (Bun is the runtime; [pnpm](https://pnpm.io) 11+ installs dependencies and enforces the supply-chain settings in `pnpm-workspace.yaml`).
+This fork publishes as `@adefee/prequel-ts` (not the original `@mdesjardins/prequel` npm package) and installs a `prequel-ts` command so it does not overwrite the upstream `prequel` binary. Clone this repo and run the commands below (Bun is the runtime; [pnpm](https://pnpm.io) 11+ installs dependencies and enforces the supply-chain settings in `pnpm-workspace.yaml`).
 
 ```bash
 git clone https://github.com/adefee/prequel-ts.git
@@ -40,6 +38,11 @@ cd prequel-ts
 pnpm install
 pnpm build                # bundle the browser modules into public/dist
 pnpm start                # review the current directory
+
+# optional: put `prequel-ts` on your PATH (does not replace `prequel`)
+pnpm add -g .
+# to undo the shim
+pnpm remove -g @adefee/prequel-ts
 ```
 
 Or point it at another repo:
@@ -74,13 +77,15 @@ prequel install claude
 
 ## Closing the loop with Claude
 
+> This is presently unchanged from the original behavior. I don't use this functionality today, but preserved it for others that might.
+
 Instead of copy/pasting the export, install the bundled skill so Claude Code can
 read your comments straight from the running server and resolve each one as it
 addresses it:
 
 ```bash
 pnpm start -- install claude
-# or, once the CLI is on your PATH: prequel install claude
+# or, once the CLI is on your PATH: prequel-ts install claude
 ```
 
 It goes in `~/.claude/skills` rather than a project's `.claude/skills` because you
@@ -142,7 +147,7 @@ src/comments/commentStore.ts   per-repo comment persistence (~/.prequel)
 src/comments/commentHtml.ts    markdown -> allowlist-sanitized HTML
 src/export/claudeExport.ts     build markdown/JSON export payload
 src/sampleDiff.ts          built-in sample diff (fallback outside a repo)
-src/installer.ts           `prequel install <agent>`
+src/installer.ts           `prequel-ts install <agent>`
 views/review-start.ejs     streamed page chrome (header, loaders)
 views/review-end.ejs       streamed diff body + client modules
 views/ref-picker.ejs       local-branch compare dropdown + last-fetch label

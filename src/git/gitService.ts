@@ -164,13 +164,14 @@ export function fetchedLabel(iso: string | null): string {
   const then = Date.parse(iso);
   if (!Number.isFinite(then)) return 'no remote';
   const sec = Math.floor((Date.now() - then) / 1000);
-  if (sec < 45) return 'fetched just now';
+  if (sec < 20) return 'fetched just now';
   const min = Math.floor(sec / 60);
+  if (min < 1) return `fetched ${sec}s ago`;
   if (min < 60) return `fetched ${min}m ago`;
   const hr = Math.floor(min / 60);
-  if (hr < 48) return `fetched ${hr}h ago`;
+  if (hr < 24) return `fetched ${hr}h ago`;
   const days = Math.floor(hr / 24);
-  if (days < 30) return `fetched ${days}d ago`;
+  if (days < 14) return `fetched ${days}d ago`;
   return `fetched ${new Date(then).toLocaleDateString()}`;
 }
 

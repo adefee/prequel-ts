@@ -84,6 +84,8 @@ export interface BranchInfo {
 export type CommentSide = 'new' | 'old' | 'file';
 export type CommentAuthor = 'user' | 'claude';
 export type CommentStatus = 'open' | 'resolved';
+/** How strongly the author wants this comment acted on. */
+export type CommentSeverity = 'note' | 'suggestion' | 'blocking';
 
 export interface Comment {
   id: string;

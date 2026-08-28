@@ -2,7 +2,10 @@
   <div class="review-layout">
     <% if (treeHtml) { %>
     <aside class="file-tree-pane" aria-label="Changed files">
-      <div class="tree-header">Files changed</div>
+      <div class="tree-header">
+        <span>Files changed</span>
+        <input type="search" class="tree-filter" placeholder="Filter files" aria-label="Filter changed files" />
+      </div>
       <nav class="file-tree"><%- treeHtml %></nav>
     </aside>
     <div class="tree-resizer" role="separator" aria-orientation="vertical" aria-label="Resize file pane" title="Drag to resize"></div>

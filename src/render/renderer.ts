@@ -368,6 +368,7 @@ function renderTreeNode(node: TreeNode, depth: number): string {
     const pad = 8 + depth * 14 + 14;
     html +=
       `<a class="tree-row tree-file-row" href="#diff-${file.id}" data-file-id="${file.id}"` +
+      ` data-file-path="${escapeHtml(file.newPath)}"` +
       ` style="padding-left:${pad}px" title="${escapeHtml(file.newPath)}">` +
       `<span class="tree-status tree-status-${file.status}" aria-hidden="true"></span>` +
       `<span class="tree-name">${escapeHtml(name)}</span>` +
