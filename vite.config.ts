@@ -13,11 +13,15 @@ const LOOPBACK_ORIGIN = /^https?:\/\/(127\.0\.0\.1|localhost)(:\d+)?$/;
 
 export const DEV_PORT = 5173;
 
-export default defineConfig({
+export default defineConfig(({ command }) => ({
   root,
   // No index.html: Bun renders the page, Vite only serves/builds modules.
   appType: 'custom',
-  base: '/static/dist/',
+  // Production files live at /static/dist/*.js (Bun serves public/dist).
+  // The dev page loads http://127.0.0.1:5173/client/*.ts — applying the
+  // production public path to `vite serve` 404s every module and none of
+  // the UI JavaScript runs (path editor, shortcuts menu, comments, …).
+  base: command === 'build' ? '/static/dist/' : '/',
   publicDir: false,
   server: {
     host: '127.0.0.1',
@@ -44,4 +48,4 @@ export default defineConfig({
       },
     },
   },
-});
+}));
