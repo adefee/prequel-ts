@@ -9,7 +9,6 @@ import path from 'node:path';
 import fs from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import ejs from 'ejs';
-import { marked } from 'marked';
 import { renderDiff, renderFileTree } from './render/renderer';
 import { highlightDiff, highlightLines } from './render/highlighter';
 import { annotateWordDiffs } from './render/wordDiff';
@@ -25,6 +24,7 @@ import {
   clearComments,
   restoreCleared,
 } from './comments/commentStore';
+import { renderCommentHtml } from './comments/commentHtml';
 import { buildMarkdown, buildJson } from './export/claudeExport';
 import { HttpError, messageOf, statusOf } from './errors';
 import type {
@@ -52,8 +52,6 @@ const DEFAULT_VITE_ORIGIN = 'http://127.0.0.1:5173';
 
 type JsonBody = Record<string, unknown>;
 
-marked.setOptions({ breaks: true });
-
 // Resolve a user-supplied filesystem path to a repo the server can serve.
 // Returns the git toplevel when the path is inside a repo; otherwise keeps the
 // absolute directory (sample-diff mode). Rejects missing / non-directory paths.
@@ -73,11 +71,9 @@ async function resolveRepoSwitch(input: unknown): Promise<RepoScope> {
   return { repoRoot: root, displayPath: root || abs };
 }
 
-// Add rendered markdown (bodyHtml) for the client to display. marked types
-// `parse` as possibly-async because an extension could make it so; none are
-// registered here, so the result is always a string.
+// Rendered markdown for the client (sanitized; interpolated as HTML in the tab).
 function withHtml(c: Comment): CommentWithHtml {
-  return { ...c, bodyHtml: marked.parse(c.body || '') as string };
+  return { ...c, bodyHtml: renderCommentHtml(c.body) };
 }
 
 // Best-effort: add ".prequel/" to the repo's local git exclude so exported
