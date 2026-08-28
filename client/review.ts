@@ -4,6 +4,7 @@
 // on loads where the URL doesn't pin them.
 
 import { closestFrom, currentRepoPath, escapeHtml, withRepoQuery } from './dom';
+import { initFileFilter } from './fileFilter';
 
 /** What `/api/context` returns for a hunk-expansion request. */
 interface ContextResponse {
@@ -590,6 +591,9 @@ function initRepoPicker(): void {
 }
 initRepoPicker();
 initBranchPickers();
+const treeFilter = document.querySelector<HTMLInputElement>('.tree-filter');
+const fileTree = document.querySelector('.file-tree');
+if (treeFilter && fileTree) initFileFilter(treeFilter, fileTree);
 
 // --- "Viewed" checkboxes ------------------------------------------------
 // Persist per file id in localStorage and collapse the file.

@@ -4,7 +4,9 @@
 
 A TypeScript fork of [mdesjardins/prequel](https://github.com/mdesjardins/prequel). Same idea: a local web app that renders a Git repo's diff in a UI that looks like GitHub's Pull Request **Files changed** tab, with comments you can hand to Claude. This fork adds multi-project tabs, branch picking, and tighter git/security behavior.
 
-<img width="1285" height="718" alt="Screen Shot 2026-08-11 at 11 40 30" src="https://github.com/user-attachments/assets/67adea24-2a1b-4fb2-921c-73618fe2a273" />
+<img width="1285" alt="prequel-ts Files changed review" src="public/prequel-ts-screenshot.png" />
+
+<img width="1285" alt="prequel-ts branch picker" src="public/prequel-ts-branch-choice-screenshot.png" />
 
 ## Why
 
@@ -19,6 +21,8 @@ Prequel is a local simulator of that interface: a branch into its base, plus sta
 **pnpm 11+.** Dependencies are installed with pnpm 11 (not Bun as the package manager). Settings live in `pnpm-workspace.yaml`: minimum release age, store integrity checks, and no unapproved lifecycle/build scripts.
 
 **Several projects at once.** Click the header path to open a different repo in *this* tab. The caret next to it saves and lists bookmarked paths (localStorage). One running server backs many browser tabs: each tab carries its own `?repo=<path>`, so switching a tab does not change the others.
+
+**File filter.** The file tree has a search box that filters the changed-file list as you type (substring match on the path). Empty folders drop out; Escape clears the query.
 
 **Branch compare.** The header pills list local branches. You can pick any local branch as the head or the base (`?head=` / `?base=`) without checking anything out. All / Branch / Working are consistent with that choice: the working-tree overlay only applies when the selected head *is* the checkout; comparing another branch stays a committed-ref diff. When the head is not checked out, the header says so.
 
