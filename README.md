@@ -50,6 +50,28 @@ pnpm start -- /path/to/repo [--base <ref>] [--port <n>] [--no-open]
 
 One process can back several tabs on different projects. Each tab's `?repo=` and the header path picker are independent.
 
+### Global `prequel` command
+
+`bin/prequel.ts` is already executable with a `#!/usr/bin/env bun` shebang, so a symlink on your `PATH` is enough to run `prequel` from any directory:
+
+```bash
+mkdir -p ~/.local/bin
+ln -sf "$(pwd)/bin/prequel.ts" ~/.local/bin/prequel
+```
+
+Make sure `~/.local/bin` is on your `PATH` (add to `~/.bashrc`/`~/.zshrc` if not):
+
+```bash
+export PATH="$HOME/.local/bin:$PATH"
+```
+
+Then from any repo:
+
+```bash
+prequel [--base <ref>] [--port <n>] [--no-open]
+prequel install claude
+```
+
 ## Closing the loop with Claude
 
 Instead of copy/pasting the export, install the bundled skill so Claude Code can
