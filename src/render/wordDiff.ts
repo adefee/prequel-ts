@@ -68,10 +68,15 @@ export interface WordDiff {
   newRanges: CharRange[];
 }
 
+// Cap the LCS table (O(n·m) Int32s). Over-limit pairs take the same empty-range
+// path as the 20% similarity fallback below, so the line stays a full replace.
+const MAX_LCS_TOKENS = 256;
+
 export function computeWordDiff(oldStr: string, newStr: string): WordDiff {
   const a = tokenize(oldStr);
   const b = tokenize(newStr);
-  const matches = lcsMatches(a, b);
+  const matches =
+    a.length > MAX_LCS_TOKENS || b.length > MAX_LCS_TOKENS ? [] : lcsMatches(a, b);
 
   // If the lines share little, a full-line replacement reads better without
   // noisy word highlights — skip (GitHub does similar).

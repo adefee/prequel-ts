@@ -62,6 +62,29 @@ async function readOrNull(p: string): Promise<string | null> {
   }
 }
 
+function isEnoent(err: unknown): boolean {
+  return (err as { code?: string } | null)?.code === 'ENOENT';
+}
+
+// Refuse to mkdir/write through a symlink at dest or any existing ancestor
+// (including dest itself on --force overwrite).
+async function rejectSymlinkPath(dest: string): Promise<void> {
+  let current = path.resolve(dest);
+  for (;;) {
+    try {
+      const st = await fs.lstat(current);
+      if (st.isSymbolicLink()) {
+        throw new Error(`refusing to install through a symbolic link: ${current}`);
+      }
+    } catch (err) {
+      if (!isEnoent(err)) throw err;
+    }
+    const parent = path.dirname(current);
+    if (parent === current) break;
+    current = parent;
+  }
+}
+
 // `conflict` means the file on disk was edited; we refuse to clobber it
 // without --force so local customizations aren't silently lost.
 export async function install(
@@ -77,6 +100,7 @@ export async function install(
   if (existing === source) return { status: 'current', dest };
   if (existing !== null && !force) return { status: 'conflict', dest };
 
+  await rejectSymlinkPath(dest);
   await fs.mkdir(path.dirname(dest), { recursive: true });
   await fs.writeFile(dest, source);
   return { status: existing === null ? 'installed' : 'updated', dest };

@@ -57,11 +57,17 @@ function spawn(cmd: string[], env: Record<string, string> = {}): void {
 async function waitForApp(timeoutMs = 15000): Promise<boolean> {
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
+    const remaining = deadline - Date.now();
+    if (remaining <= 0) break;
+    const ac = new AbortController();
+    const timer = setTimeout(() => ac.abort(), remaining);
     try {
-      const res = await fetch(`${appUrl}/healthz`);
+      const res = await fetch(`${appUrl}/healthz`, { signal: ac.signal });
       if (res.ok) return true;
     } catch {
       /* not listening yet */
+    } finally {
+      clearTimeout(timer);
     }
     await Bun.sleep(200);
   }

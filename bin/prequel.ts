@@ -6,7 +6,7 @@ import process from 'node:process';
 import open from 'open';
 import { startServer } from '../src/server';
 import { resolveRepoRoot } from '../src/git/gitService';
-import { install, staleTargets, TARGET_NAMES } from '../src/installer';
+import { install, staleTargets, TARGET_NAMES, type InstallResult } from '../src/installer';
 
 const VERSION = (
   JSON.parse(
@@ -35,7 +35,7 @@ function parseArgs(argv: string[]): Options {
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i]!;
     if (a === '--base') opts.base = argv[++i] ?? null;
-    else if (a === '--port') opts.port = Number(argv[++i]);
+    else if (a === '--port') opts.port = parseListenPort(argv[++i]);
     else if (a === '--no-open') opts.open = false;
     else if (a === '--project') opts.project = true;
     else if (a === '--force' || a === '-f') opts.force = true;
@@ -70,6 +70,22 @@ comments, fixing them one at a time, and resolving each in the UI as it goes.
 
 const FIRST_PORT = 4711;
 const PORT_TRIES = 100;
+const MIN_PORT = 1;
+const MAX_PORT = 65535;
+
+function parseListenPort(raw: string | undefined): number {
+  if (raw === undefined || raw === '') {
+    throw new Error(`--port requires an integer between ${MIN_PORT} and ${MAX_PORT}`);
+  }
+  if (!/^[0-9]+$/.test(raw)) {
+    throw new Error(`invalid --port: ${raw}`);
+  }
+  const port = Number(raw);
+  if (!Number.isInteger(port) || port < MIN_PORT || port > MAX_PORT) {
+    throw new Error(`invalid --port: ${raw}`);
+  }
+  return port;
+}
 
 function isAddressInUse(err: unknown): boolean {
   const code = (err as { code?: string } | null)?.code;
@@ -105,7 +121,15 @@ async function runInstall(target: string | undefined, opts: Options): Promise<vo
     process.exitCode = 1;
     return;
   }
-  const { status, dest } = await install(target, { project: opts.project, force: opts.force });
+  let result: InstallResult;
+  try {
+    result = await install(target, { project: opts.project, force: opts.force });
+  } catch (err) {
+    process.stderr.write(`\n  ${err instanceof Error ? err.message : String(err)}\n\n`);
+    process.exitCode = 1;
+    return;
+  }
+  const { status, dest } = result;
   if (status === 'conflict') {
     process.stderr.write(
       `\n  A different version is already installed at\n    ${dest}\n` +
@@ -143,7 +167,7 @@ async function main(): Promise<void> {
   const effectiveRepo = repoRoot || opts.repoPath;
 
   const serve = (port: number) => startServer({ port, repoRoot, defaultBase: opts.base });
-  const server = opts.port ? serve(opts.port) : listenFromPort(FIRST_PORT, serve);
+  const server = opts.port !== null ? serve(opts.port) : listenFromPort(FIRST_PORT, serve);
 
   const url = `http://127.0.0.1:${server.port}`;
   process.stdout.write(`\n  prequel running at ${url}\n`);

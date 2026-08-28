@@ -130,6 +130,7 @@ async function expandContext(btn: Element): Promise<void> {
           `&start=${gapStartNew}&end=${gapEndNew}`
       )
     );
+    if (!res.ok) throw new Error(`context ${res.status}`);
     const data = (await res.json()) as ContextResponse;
     const lines = data.lines || [];
     let frag = '';

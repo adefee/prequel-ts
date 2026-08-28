@@ -23,6 +23,13 @@ function blockquote(body: string | null | undefined): string {
     .join('\n');
 }
 
+// Fence long enough that it cannot appear inside `code` (CommonMark).
+function codeFence(code: string): string {
+  const runs = code.match(/`+/g);
+  const longest = runs ? Math.max(...runs.map((s) => s.length)) : 0;
+  return '`'.repeat(Math.max(3, longest + 1));
+}
+
 function bySortedFile(comments: Comment[]): Array<[string, Comment[]]> {
   const groups = new Map<string, Comment[]>();
   for (const c of comments) {
@@ -62,9 +69,10 @@ export function buildMarkdown(
       out.push(idMarker(c));
       const code = (c.lineSnapshot || []).join('\n');
       if (code) {
-        out.push('```' + lang);
+        const fence = codeFence(code);
+        out.push(fence + lang);
         out.push(code);
-        out.push('```');
+        out.push(fence);
       }
       out.push(blockquote(c.body));
       out.push('');

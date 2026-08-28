@@ -14,7 +14,7 @@ export const sampleDiff: Diff = {
       status: 'modified',
       isBinary: false,
       language: 'typescript',
-      additions: 6,
+      additions: 4,
       deletions: 2,
       hunks: [
         {

@@ -105,6 +105,24 @@ const json = (data: unknown, status = 200): Response => Response.json(data, { st
 const text = (body: string, status: number): Response => new Response(body, { status });
 const apiError = (err: unknown): Response => json({ error: messageOf(err) }, statusOf(err));
 
+// Browser mutations must be same-origin. curl / the skill send neither
+// Sec-Fetch-Site nor Origin and are not a CSRF vector, so they pass.
+function assertSameOrigin(req: Request): void {
+  const site = req.headers.get('sec-fetch-site');
+  if (site === 'same-origin') return;
+  const origin = req.headers.get('origin');
+  if (origin) {
+    try {
+      if (origin === new URL(req.url).origin) return;
+    } catch {
+      /* malformed request URL */
+    }
+  } else if (!site) {
+    return;
+  }
+  throw new HttpError(403, 'cross-origin request');
+}
+
 // POST bodies are small JSON documents; anything larger is refused outright.
 async function readJsonBody(req: Request): Promise<JsonBody> {
   const declared = Number(req.headers.get('content-length') ?? 0);
@@ -446,7 +464,8 @@ export function createApp(options: ServerOptions = {}): (req: Request) => Promis
       filePath: String(body.filePath),
       side,
       startLine,
-      endLine: side === 'file' ? 0 : Number.isFinite(endLine) ? endLine : startLine,
+      endLine:
+        side === 'file' ? 0 : Number.isFinite(endLine) ? Math.max(endLine, startLine) : startLine,
       body: String(body.body),
       branch: body.branch ? String(body.branch) : null,
       lineSnapshot: Array.isArray(body.lineSnapshot) ? body.lineSnapshot.map(String) : [],
@@ -552,6 +571,10 @@ export function createApp(options: ServerOptions = {}): (req: Request) => Promis
     const method = req.method.toUpperCase();
 
     try {
+      if (method === 'POST' || method === 'PATCH' || method === 'DELETE') {
+        assertSameOrigin(req);
+      }
+
       if (method === 'GET' || method === 'HEAD') {
         if (pathname === '/') return await renderPage(req, url);
         if (pathname === '/healthz') return await healthz(url);

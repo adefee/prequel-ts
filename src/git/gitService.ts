@@ -60,12 +60,31 @@ export async function getDefaultBase(repoRoot: string): Promise<string> {
   return 'HEAD'; // last resort: diff against working tree only
 }
 
-// Current branch name, or a short SHA when detached.
+async function headHasCommit(repoRoot: string): Promise<boolean> {
+  try {
+    await git(repoRoot, ['rev-parse', '--verify', '--quiet', 'HEAD']);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+// Current branch name, or a short SHA when detached. Unborn HEAD (no commits)
+// is represented as the branch name when there is one, otherwise 'HEAD'.
 export async function getHead(repoRoot: string): Promise<string> {
-  const name = (await git(repoRoot, ['rev-parse', '--abbrev-ref', 'HEAD'])).trim();
-  if (name && name !== 'HEAD') return name;
-  const sha = (await git(repoRoot, ['rev-parse', '--short', 'HEAD'])).trim();
-  return sha || 'HEAD';
+  try {
+    const name = (await git(repoRoot, ['rev-parse', '--abbrev-ref', 'HEAD'])).trim();
+    if (name && name !== 'HEAD') return name;
+  } catch {
+    /* unborn or missing HEAD */
+  }
+  try {
+    const sha = (await git(repoRoot, ['rev-parse', '--short', 'HEAD'])).trim();
+    if (sha) return sha;
+  } catch {
+    /* no commit yet */
+  }
+  return 'HEAD';
 }
 
 async function mergeBase(repoRoot: string, base: string): Promise<string> {
@@ -124,7 +143,9 @@ export async function getDiff(
 
   let patch = '';
   if (mode === 'working') {
-    patch = await git(repoRoot, ['diff', ...DIFF_FLAGS, 'HEAD']);
+    if (await headHasCommit(repoRoot)) {
+      patch = await git(repoRoot, ['diff', ...DIFF_FLAGS, 'HEAD']);
+    }
     patch += await untrackedPatches(repoRoot);
   } else if (mode === 'branch') {
     const mb = await mergeBase(repoRoot, baseRef);

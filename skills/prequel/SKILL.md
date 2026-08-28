@@ -18,10 +18,12 @@ that can serve *this* repo:
 
 ```bash
 ROOT=$(git rev-parse --show-toplevel)
-for p in $(seq 4711 4720); do
+PORT=
+for p in $(seq 4711 4810); do
   if curl -sf --max-time 1 -G "http://localhost:$p/healthz" --data-urlencode "repo=$ROOT" \
     | grep -qF "\"repoRoot\":\"$ROOT\""; then
-    echo "PREQUEL_PORT=$p"; break
+    PORT=$p
+    break
   fi
 done
 ```

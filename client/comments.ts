@@ -523,6 +523,8 @@ async function runClear(): Promise<void> {
       label: 'Undo',
       fn: () => void undoClear(),
     });
+  } catch {
+    toast('Clear failed.');
   } finally {
     if (clearBtn) clearBtn.disabled = false;
   }
