@@ -40,9 +40,9 @@ pnpm build                # bundle the browser modules into public/dist
 pnpm start                # review the current directory
 
 # optional, if you want `prequel <target>` to work in bash
-pnpm link --global
+pnpm add -g .
 # to undo the shim
-pnpm unlink --global
+pnpm remove -g .
 ```
 
 Or point it at another repo:
