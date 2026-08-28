@@ -26,6 +26,8 @@ import {
 import { HttpError, messageOf, statusOf } from "./errors";
 import { buildMarkdown, buildJson } from "./export/claudeExport";
 import { parseDiff, inferLanguage, type ReviewDiff } from "./git/diff";
+import { fetchPrReviewComments } from "./git/prComments";
+import { getGhHost, isSafeGhHost, setGhHost } from "./git/prConfig";
 import {
   DEFAULT_DIFF_MODE,
   fetchedLabel,
@@ -33,6 +35,7 @@ import {
   getCompareMeta,
   getDiff,
   getBlobLines,
+  isSafeRefName,
   listLocalBranches,
   resolveCompareRef,
   resolveRepoRoot,
@@ -570,6 +573,32 @@ export function createApp(options: ServerOptions = {}): (req: Request) => Promis
     return json({ from, eof, lines, html });
   }
 
+  // Read-only: line-anchored review comments from this branch's open GitHub
+  // PR, for the client to show as context next to the matching diff line.
+  async function getPrComments(req: Request, url: URL): Promise<Response> {
+    const scope = await requireRepo(req, url);
+    const repoRoot = scope.repoRoot!;
+    const branch = trimmedString(url.searchParams.get("branch"));
+    if (!branch) {
+      throw new HttpError(400, "branch required");
+    }
+    if (!isSafeRefName(branch)) {
+      throw new HttpError(400, "unsafe branch name");
+    }
+    // A passed ghHost (e.g. a GHE hostname) is remembered per repo so it only
+    // has to be typed once; omit it to reuse whatever was last saved.
+    const rawHost = trimmedString(url.searchParams.get("ghHost"));
+    if (rawHost) {
+      if (!isSafeGhHost(rawHost)) {
+        throw new HttpError(400, "invalid GitHub host");
+      }
+      await setGhHost(repoRoot, rawHost, commentDir);
+    }
+    const ghHost = rawHost || (await getGhHost(repoRoot, commentDir));
+    const threads = await fetchPrReviewComments(repoRoot, branch, ghHost);
+    return json({ threads, ghHost });
+  }
+
   async function getCommentList(req: Request, url: URL): Promise<Response> {
     const scope = await scopeFromRequest(req, url);
     if (!scope.repoRoot) {
@@ -787,6 +816,9 @@ export function createApp(options: ServerOptions = {}): (req: Request) => Promis
         }
         if (pathname === "/api/comments") {
           return await getCommentList(req, url);
+        }
+        if (pathname === "/api/pr-comments") {
+          return await getPrComments(req, url);
         }
         if (pathname.startsWith("/static/")) {
           return await serveStatic(publicDir, pathname.slice("/static/".length));

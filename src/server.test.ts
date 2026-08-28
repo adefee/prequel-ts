@@ -163,3 +163,18 @@ test("export selects and orders only actionable user roots on the chosen branch"
   expect(exported.path).toMatch(/^\.prequel\/review-.*\.json$/);
   expect(await fs.readFile(path.join(root, exported.path), "utf8")).toBe(exported.content);
 });
+
+test("PR comment import requires a branch", async () => {
+  const { app } = await setup();
+  const missing = await request(app, "/api/pr-comments");
+  expect(missing.status).toBe(400);
+  expect(await missing.json()).toEqual({ error: "branch required" });
+
+  const unsafe = await request(app, "/api/pr-comments?branch=foo..bar");
+  expect(unsafe.status).toBe(400);
+  expect(await unsafe.json()).toEqual({ error: "unsafe branch name" });
+
+  const host = await request(app, "/api/pr-comments?branch=main&ghHost=bad%20host");
+  expect(host.status).toBe(400);
+  expect(await host.json()).toEqual({ error: "invalid GitHub host" });
+});
