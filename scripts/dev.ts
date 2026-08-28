@@ -6,10 +6,10 @@
 // — so the browser URL and Vite's HMR socket stay stable across restarts.
 // Anything after `pnpm dev --` is forwarded to the CLI.
 
-import { existsSync } from 'node:fs';
-import path from 'node:path';
-import { fileURLToPath } from 'node:url';
-import open from 'open';
+import { existsSync } from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+import open from "open";
 
 /** Just enough of Bun's Subprocess to supervise it, without its stdio generics. */
 interface Child {
@@ -17,8 +17,8 @@ interface Child {
   readonly exited: Promise<number>;
 }
 
-const projectRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const viteBin = path.join(projectRoot, 'node_modules', '.bin', 'vite');
+const projectRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+const viteBin = path.join(projectRoot, "node_modules", ".bin", "vite");
 
 const VITE_PORT = Number(process.env.PREQUEL_VITE_PORT ?? 5173);
 const APP_PORT = Number(process.env.PREQUEL_PORT ?? 4711);
@@ -26,7 +26,7 @@ const viteOrigin = `http://127.0.0.1:${VITE_PORT}`;
 const appUrl = `http://127.0.0.1:${APP_PORT}`;
 
 if (!existsSync(viteBin)) {
-  process.stderr.write('\n  vite is not installed — run `pnpm install` first.\n\n');
+  process.stderr.write("\n  vite is not installed — run `pnpm install` first.\n\n");
   process.exit(1);
 }
 
@@ -35,7 +35,9 @@ let shuttingDown = false;
 
 function shutdown(code = 0): never {
   shuttingDown = true;
-  for (const child of children) child.kill();
+  for (const child of children) {
+    child.kill();
+  }
   process.exit(code);
 }
 
@@ -43,12 +45,14 @@ function spawn(cmd: string[], env: Record<string, string> = {}): void {
   const child: Child = Bun.spawn(cmd, {
     cwd: projectRoot,
     env: { ...process.env, ...env },
-    stdio: ['inherit', 'inherit', 'inherit'],
+    stdio: ["inherit", "inherit", "inherit"],
   });
   children.push(child);
   // If either half dies, the other is useless — take the whole thing down.
   void child.exited.then((code) => {
-    if (!shuttingDown) shutdown(code);
+    if (!shuttingDown) {
+      shutdown(code);
+    }
   });
 }
 
@@ -58,12 +62,16 @@ async function waitForApp(timeoutMs = 15000): Promise<boolean> {
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
     const remaining = deadline - Date.now();
-    if (remaining <= 0) break;
+    if (remaining <= 0) {
+      break;
+    }
     const ac = new AbortController();
     const timer = setTimeout(() => ac.abort(), remaining);
     try {
       const res = await fetch(`${appUrl}/healthz`, { signal: ac.signal });
-      if (res.ok) return true;
+      if (res.ok) {
+        return true;
+      }
     } catch {
       /* not listening yet */
     } finally {
@@ -74,22 +82,22 @@ async function waitForApp(timeoutMs = 15000): Promise<boolean> {
   return false;
 }
 
-for (const signal of ['SIGINT', 'SIGTERM'] as const) {
+for (const signal of ["SIGINT", "SIGTERM"] as const) {
   process.on(signal, () => shutdown(0));
 }
 
-spawn([viteBin, '--port', String(VITE_PORT), '--strictPort']);
+spawn([viteBin, "--port", String(VITE_PORT), "--strictPort"]);
 spawn(
   [
     process.execPath,
-    '--watch',
-    'bin/prequel.ts',
-    '--port',
+    "--watch",
+    "bin/prequel.ts",
+    "--port",
     String(APP_PORT),
-    '--no-open',
+    "--no-open",
     ...process.argv.slice(2),
   ],
-  { PREQUEL_DEV: '1', PREQUEL_VITE_ORIGIN: viteOrigin }
+  { PREQUEL_DEV: "1", PREQUEL_VITE_ORIGIN: viteOrigin },
 );
 
 process.stdout.write(`\n  app:  ${appUrl}\n  vite: ${viteOrigin}  (client HMR)\n\n`);

@@ -11,11 +11,11 @@
 // It also overlays word-level (intra-line) diff highlighting: changed character
 // ranges (from wordDiff.ts, on line.wordRanges) get an extra `wd` class.
 
-import { createHighlighter } from 'shiki';
-import type { BundledLanguage, Highlighter } from 'shiki';
-import type { CharRange, Diff } from '../types';
+import { createHighlighter } from "shiki";
+import type { BundledLanguage, Highlighter } from "shiki";
+import type { CharRange, RenderDiff } from "./renderer";
 
-const THEMES = { light: 'github-light', dark: 'github-dark' } as const;
+const THEMES = { light: "github-light", dark: "github-dark" } as const;
 
 /**
  * The slice of a Shiki token this module needs. Declared locally so the render
@@ -40,8 +40,12 @@ async function getHighlighter(): Promise<Highlighter> {
 }
 
 async function ensureLang(hl: Highlighter, lang: string | null): Promise<boolean> {
-  if (!lang) return false;
-  if (loadedLangs.has(lang)) return true;
+  if (!lang) {
+    return false;
+  }
+  if (loadedLangs.has(lang)) {
+    return true;
+  }
   try {
     await hl.loadLanguage(lang as BundledLanguage);
     loadedLangs.add(lang);
@@ -53,10 +57,10 @@ async function ensureLang(hl: Highlighter, lang: string | null): Promise<boolean
 
 function escapeHtml(s: string): string {
   return String(s)
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;');
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
 }
 
 // Bounded cache of tokenized text -> array of token-lines.
@@ -65,8 +69,8 @@ const CACHE_MAX = 800;
 
 function tokenStyle(tok: Token): string {
   return tok.htmlStyle
-    ? `color:${tok.htmlStyle['color']};--shiki-dark:${tok.htmlStyle['--shiki-dark']}`
-    : '';
+    ? `color:${tok.htmlStyle["color"]};--shiki-dark:${tok.htmlStyle["--shiki-dark"]}`
+    : "";
 }
 
 // Emit a token's content, splitting at word-diff range boundaries so changed
@@ -79,13 +83,15 @@ function tokenToHtml(tok: Token, base: number, ranges: CharRange[] | null): stri
     return `<span class="tok" style="${style}">${escapeHtml(content)}</span>`;
   }
   const inRange = (abs: number) => ranges.some(([s, e]) => abs >= s && abs < e);
-  let out = '';
+  let out = "";
   let i = 0;
   while (i < content.length) {
     const changed = inRange(base + i);
     let j = i + 1;
-    while (j < content.length && inRange(base + j) === changed) j++;
-    const cls = changed ? 'tok wd' : 'tok';
+    while (j < content.length && inRange(base + j) === changed) {
+      j++;
+    }
+    const cls = changed ? "tok wd" : "tok";
     out += `<span class="${cls}" style="${style}">${escapeHtml(content.slice(i, j))}</span>`;
     i = j;
   }
@@ -94,8 +100,10 @@ function tokenToHtml(tok: Token, base: number, ranges: CharRange[] | null): stri
 
 // Assemble one line's HTML from its tokens, applying word-diff ranges.
 function assembleLine(lineTokens: Token[] | undefined, ranges: CharRange[] | null): string {
-  if (!lineTokens) return '';
-  let html = '';
+  if (!lineTokens) {
+    return "";
+  }
+  let html = "";
   let pos = 0;
   for (const tok of lineTokens) {
     html += tokenToHtml(tok, pos, ranges);
@@ -105,15 +113,17 @@ function assembleLine(lineTokens: Token[] | undefined, ranges: CharRange[] | nul
 }
 
 function plainTokenLines(text: string): Token[][] {
-  return text.split('\n').map((l) => (l === '' ? [] : [{ content: l, htmlStyle: null }]));
+  return text.split("\n").map((l) => (l === "" ? [] : [{ content: l, htmlStyle: null }]));
 }
 
 // Cached tokenization: text -> array of token-lines (each token has content +
 // htmlStyle). Falls back to plain single-token lines if Shiki can't tokenize.
 function tokensForText(hl: Highlighter, text: string, lang: string): Token[][] {
-  const key = lang + ' ' + text;
+  const key = lang + " " + text;
   const hit = cache.get(key);
-  if (hit) return hit;
+  if (hit) {
+    return hit;
+  }
   let perLine: Token[][];
   try {
     perLine = hl.codeToTokens(text, { lang: lang as BundledLanguage, themes: THEMES })
@@ -121,7 +131,9 @@ function tokensForText(hl: Highlighter, text: string, lang: string): Token[][] {
   } catch {
     perLine = plainTokenLines(text);
   }
-  if (cache.size >= CACHE_MAX) cache.clear();
+  if (cache.size >= CACHE_MAX) {
+    cache.clear();
+  }
   cache.set(key, perLine);
   return perLine;
 }
@@ -130,19 +142,35 @@ function tokensForText(hl: Highlighter, text: string, lang: string): Token[][] {
 // Returns an array of per-line HTML, or null if the language isn't available.
 export async function highlightLines(
   lines: string[],
-  lang: string | null
+  lang: string | null,
 ): Promise<string[] | null> {
-  if (!lang) return null;
+  if (!lang) {
+    return null;
+  }
   const hl = await getHighlighter();
-  if (!(await ensureLang(hl, lang))) return null;
-  return tokensForText(hl, lines.join('\n'), lang).map((tl) => assembleLine(tl, null));
+  if (!(await ensureLang(hl, lang))) {
+    return null;
+  }
+  return tokensForText(hl, lines.join("\n"), lang).map((tl) => assembleLine(tl, null));
 }
 
-// Mutates the diff model, attaching pre-rendered `line.html` to code lines.
+// Returns a render projection with pre-rendered `line.html` on code lines.
 // Combines Shiki syntax tokens with word-diff ranges so both layers render
 // together. Word highlighting applies even when there's no language.
-export async function highlightDiff(diff: Diff): Promise<Diff> {
-  const langs = [...new Set(diff.files.map((f) => f.language).filter((l): l is string => Boolean(l)))];
+export async function highlightDiff(input: RenderDiff): Promise<RenderDiff> {
+  const diff: RenderDiff = {
+    ...input,
+    files: input.files.map((file) => ({
+      ...file,
+      hunks: file.hunks.map((hunk) => ({
+        ...hunk,
+        lines: hunk.lines.map((line) => ({ ...line })),
+      })),
+    })),
+  };
+  const langs = [
+    ...new Set(diff.files.map((f) => f.language).filter((l): l is string => Boolean(l))),
+  ];
   let hl: Highlighter | null = null;
   const usable = new Set<string>();
   if (langs.length) {
@@ -151,33 +179,35 @@ export async function highlightDiff(diff: Diff): Promise<Diff> {
   }
 
   for (const file of diff.files) {
-    if (file.isBinary) continue;
+    if (file.isBinary) {
+      continue;
+    }
     const lang = file.language && usable.has(file.language) ? file.language : null;
     for (const hunk of file.hunks) {
       const newText = hunk.lines
-        .filter((l) => l.type === 'context' || l.type === 'add')
+        .filter((l) => l.type === "context" || l.type === "add")
         .map((l) => l.content)
-        .join('\n');
+        .join("\n");
       const oldText = hunk.lines
-        .filter((l) => l.type === 'context' || l.type === 'del')
+        .filter((l) => l.type === "context" || l.type === "del")
         .map((l) => l.content)
-        .join('\n');
+        .join("\n");
       const newTokens = lang && hl ? tokensForText(hl, newText, lang) : plainTokenLines(newText);
       const oldTokens = lang && hl ? tokensForText(hl, oldText, lang) : plainTokenLines(oldText);
 
       let ni = 0;
       let oi = 0;
       for (const line of hunk.lines) {
-        const tokens = line.type === 'del' ? oldTokens[oi] : newTokens[ni];
+        const tokens = line.type === "del" ? oldTokens[oi] : newTokens[ni];
         // Render html when there's something beyond plain text: syntax colors
         // (lang) or word-diff ranges.
         if (lang || (line.wordRanges && line.wordRanges.length)) {
           line.html = assembleLine(tokens, line.wordRanges ?? null);
         }
-        if (line.type === 'context') {
+        if (line.type === "context") {
           ni++;
           oi++;
-        } else if (line.type === 'add') {
+        } else if (line.type === "add") {
           ni++;
         } else {
           oi++;

@@ -14,7 +14,7 @@ the browser.
 
 prequel listens on the first free port from 4711 up. One process can serve many
 projects (each browser tab targets a path via `?repo=`). Find a running instance
-that can serve *this* repo:
+that can serve _this_ repo:
 
 ```bash
 ROOT=$(git rev-parse --show-toplevel)
@@ -51,16 +51,16 @@ the list, so you never end up trying to "address" something you wrote yourself.
 
 Each comment has:
 
-| Field | Meaning |
-|---|---|
-| `id` | The handle you resolve against |
-| `filePath` | Repo-relative path |
-| `side` | `new`, `old`, or `file` (a whole-file comment, not tied to a line) |
-| `startLine`, `endLine` | Line range on that side; both `0` when `side` is `file` |
-| `lineSnapshot` | The code as it looked when the comment was written |
-| `body` | The user's comment, as markdown |
-| `branch` | Branch the comment was written on; may be `null` |
-| `bodyHtml` | Rendered markdown — ignore it, read `body` |
+| Field                  | Meaning                                                            |
+| ---------------------- | ------------------------------------------------------------------ |
+| `id`                   | The handle you resolve against                                     |
+| `filePath`             | Repo-relative path                                                 |
+| `side`                 | `new`, `old`, or `file` (a whole-file comment, not tied to a line) |
+| `startLine`, `endLine` | Line range on that side; both `0` when `side` is `file`            |
+| `lineSnapshot`         | The code as it looked when the comment was written                 |
+| `body`                 | The user's comment, as markdown                                    |
+| `branch`               | Branch the comment was written on; may be `null`                   |
+| `bodyHtml`             | Rendered markdown — ignore it, read `body`                         |
 
 Skip any comment whose `branch` is set and differs from the current branch
 (`git branch --show-current`). A `null` branch means "unknown" — include it.

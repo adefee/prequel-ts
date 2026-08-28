@@ -1,4 +1,4 @@
-declare module 'sanitize-html' {
+declare module "sanitize-html" {
   interface SanitizeOptions {
     allowedTags?: string[];
     allowedAttributes?: Record<string, string[]>;

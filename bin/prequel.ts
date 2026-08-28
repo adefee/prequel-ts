@@ -1,19 +1,19 @@
 #!/usr/bin/env bun
-import { readFileSync } from 'node:fs';
-import path from 'node:path';
-import { fileURLToPath } from 'node:url';
-import process from 'node:process';
-import open from 'open';
-import { startServer } from '../src/server';
-import { resolveRepoRoot } from '../src/git/gitService';
-import { install, staleTargets, TARGET_NAMES, type InstallResult } from '../src/installer';
+import { readFileSync } from "node:fs";
+import path from "node:path";
+import process from "node:process";
+import { fileURLToPath } from "node:url";
+import open from "open";
+import { resolveRepoRoot } from "../src/git/repository";
+import { install, staleTargets, TARGET_NAMES, type InstallResult } from "../src/installer";
+import { startServer } from "../src/server";
 
 const VERSION = (
   JSON.parse(
     readFileSync(
-      path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', 'package.json'),
-      'utf8'
-    )
+      path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "package.json"),
+      "utf8",
+    ),
   ) as { version: string }
 ).version;
 
@@ -34,16 +34,27 @@ function parseArgs(argv: string[]): Options {
   const positional: string[] = [];
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i]!;
-    if (a === '--base') opts.base = argv[++i] ?? null;
-    else if (a === '--port') opts.port = parseListenPort(argv[++i]);
-    else if (a === '--no-open') opts.open = false;
-    else if (a === '--project') opts.project = true;
-    else if (a === '--force' || a === '-f') opts.force = true;
-    else if (a === '--help' || a === '-h') opts.help = true;
-    else if (a === '--version' || a === '-v' || a === '-V') opts.version = true;
-    else if (!a.startsWith('-')) positional.push(a);
+    if (a === "--base") {
+      opts.base = argv[++i] ?? null;
+    } else if (a === "--port") {
+      opts.port = parseListenPort(argv[++i]);
+    } else if (a === "--no-open") {
+      opts.open = false;
+    } else if (a === "--project") {
+      opts.project = true;
+    } else if (a === "--force" || a === "-f") {
+      opts.force = true;
+    } else if (a === "--help" || a === "-h") {
+      opts.help = true;
+    } else if (a === "--version" || a === "-v" || a === "-V") {
+      opts.version = true;
+    } else if (!a.startsWith("-")) {
+      positional.push(a);
+    }
   }
-  if (positional[0]) opts.repoPath = positional[0];
+  if (positional[0]) {
+    opts.repoPath = positional[0];
+  }
   return opts;
 }
 
@@ -74,7 +85,7 @@ const MIN_PORT = 1;
 const MAX_PORT = 65535;
 
 function parseListenPort(raw: string | undefined): number {
-  if (raw === undefined || raw === '') {
+  if (raw === undefined || raw === "") {
     throw new Error(`--port requires an integer between ${MIN_PORT} and ${MAX_PORT}`);
   }
   if (!/^[0-9]+$/.test(raw)) {
@@ -89,7 +100,7 @@ function parseListenPort(raw: string | undefined): number {
 
 function isAddressInUse(err: unknown): boolean {
   const code = (err as { code?: string } | null)?.code;
-  return code === 'EADDRINUSE' || /address already in use|EADDRINUSE/i.test(String(err));
+  return code === "EADDRINUSE" || /address already in use|EADDRINUSE/i.test(String(err));
 }
 
 // Bind the first free port at or above `start`. Binding directly (rather than
@@ -102,21 +113,23 @@ function listenFromPort(start: number, listen: (port: number) => HttpServer): Ht
     try {
       return listen(port);
     } catch (err) {
-      if (!isAddressInUse(err)) throw err;
+      if (!isAddressInUse(err)) {
+        throw err;
+      }
       lastErr = err;
     }
   }
   throw new Error(
     `no free port in ${start}–${start + PORT_TRIES - 1}` +
-      (lastErr ? ` (last error: ${(lastErr as Error).message})` : '')
+      (lastErr ? ` (last error: ${(lastErr as Error).message})` : ""),
   );
 }
 
 async function runInstall(target: string | undefined, opts: Options): Promise<void> {
   if (!target || !TARGET_NAMES.includes(target)) {
     process.stderr.write(
-      `\n  ${target ? `Unknown agent: ${target}` : 'Specify an agent'} — supported: ${TARGET_NAMES.join(', ')}\n` +
-        `  e.g. prequel-ts install ${TARGET_NAMES[0]}\n\n`
+      `\n  ${target ? `Unknown agent: ${target}` : "Specify an agent"} — supported: ${TARGET_NAMES.join(", ")}\n` +
+        `  e.g. prequel-ts install ${TARGET_NAMES[0]}\n\n`,
     );
     process.exitCode = 1;
     return;
@@ -130,23 +143,25 @@ async function runInstall(target: string | undefined, opts: Options): Promise<vo
     return;
   }
   const { status, dest } = result;
-  if (status === 'conflict') {
+  if (status === "conflict") {
     process.stderr.write(
       `\n  A different version is already installed at\n    ${dest}\n` +
-        '  Re-run with --force to overwrite it.\n\n'
+        "  Re-run with --force to overwrite it.\n\n",
     );
     process.exitCode = 1;
     return;
   }
   const verb =
-    status === 'installed'
-      ? 'Installed'
-      : status === 'updated'
-        ? 'Updated'
-        : status === 'current'
-          ? 'Already current'
+    status === "installed"
+      ? "Installed"
+      : status === "updated"
+        ? "Updated"
+        : status === "current"
+          ? "Already current"
           : status;
-  process.stdout.write(`\n  ${verb}: ${dest}\n  Run /prequel in a Claude Code session to use it.\n\n`);
+  process.stdout.write(
+    `\n  ${verb}: ${dest}\n  Run /prequel in a Claude Code session to use it.\n\n`,
+  );
 }
 
 async function main(): Promise<void> {
@@ -160,7 +175,9 @@ async function main(): Promise<void> {
     process.stdout.write(HELP);
     return;
   }
-  if (argv[0] === 'install') return runInstall(argv[1], opts);
+  if (argv[0] === "install") {
+    return runInstall(argv[1], opts);
+  }
 
   const repoRoot = await resolveRepoRoot(opts.repoPath);
   // A non-repo is tolerated: the server falls back to the built-in sample diff.
@@ -172,15 +189,15 @@ async function main(): Promise<void> {
   const url = `http://127.0.0.1:${server.port}`;
   process.stdout.write(`\n  prequel running at ${url}\n`);
   process.stdout.write(
-    `  repo: ${effectiveRepo}${repoRoot ? '' : '  (not a git repo — showing sample diff)'}\n`
+    `  repo: ${effectiveRepo}${repoRoot ? "" : "  (not a git repo — showing sample diff)"}\n`,
   );
-  process.stdout.write('  Ctrl-C to stop\n');
+  process.stdout.write("  Ctrl-C to stop\n");
   for (const target of await staleTargets()) {
     process.stdout.write(
-      `  (your installed ${target} integration is out of date — run: prequel-ts install ${target} --force)\n`
+      `  (your installed ${target} integration is out of date — run: prequel-ts install ${target} --force)\n`,
     );
   }
-  process.stdout.write('\n');
+  process.stdout.write("\n");
   if (opts.open) {
     try {
       await open(url);
@@ -191,6 +208,8 @@ async function main(): Promise<void> {
 }
 
 main().catch((err: unknown) => {
-  process.stderr.write(`prequel failed to start: ${err instanceof Error ? err.message : String(err)}\n`);
+  process.stderr.write(
+    `prequel failed to start: ${err instanceof Error ? err.message : String(err)}\n`,
+  );
   process.exit(1);
 });

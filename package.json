@@ -2,17 +2,22 @@
   "name": "@adefee/prequel-ts",
   "version": "0.3.1",
   "description": "Review it before it's a pull request — a local, GitHub-style diff reviewer (TypeScript fork)",
-  "type": "module",
-  "license": "GPL-3.0-or-later",
-  "author": "Mike Desjardins",
-  "packageManager": "pnpm@11.21.0+sha512.521705bce689924eac72f5a3587122f362689ef6571e55ba80076fd637c11132ecffada26fad4ea79c485bfddbfd3d5a2a5b05805a77e893de71ec8a6cca3bb1",
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/adefee/prequel-ts.git"
-  },
+  "keywords": [
+    "cli",
+    "code-review",
+    "diff",
+    "git",
+    "pull-request"
+  ],
   "homepage": "https://github.com/adefee/prequel-ts#readme",
   "bugs": {
     "url": "https://github.com/adefee/prequel-ts/issues"
+  },
+  "license": "GPL-3.0-or-later",
+  "author": "Mike Desjardins",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/adefee/prequel-ts.git"
   },
   "bin": {
     "prequel-ts": "bin/prequel.ts"
@@ -24,29 +29,24 @@
     "public",
     "skills"
   ],
-  "engines": {
-    "bun": ">=1.2.0",
-    "node": ">=22.12.0",
-    "pnpm": ">=11.0.0 <12.0.0"
-  },
+  "type": "module",
   "publishConfig": {
     "access": "public"
   },
-  "keywords": [
-    "git",
-    "diff",
-    "code-review",
-    "pull-request",
-    "cli"
-  ],
   "scripts": {
     "start": "bun bin/prequel.ts",
     "dev": "bun scripts/dev.ts",
     "build": "vite build",
-    "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.node.json"
+    "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.node.json",
+    "test": "bun test",
+    "lint": "oxlint .",
+    "format": "oxfmt --write .",
+    "format:check": "oxfmt --check .",
+    "check": "pnpm format:check && pnpm lint && pnpm typecheck && pnpm test && pnpm build"
   },
   "dependencies": {
     "@primer/primitives": "^10.5.0",
+    "diff": "^9.0.0",
     "ejs": "^3.1.10",
     "marked": "^12.0.2",
     "open": "^10.1.0",
@@ -56,7 +56,15 @@
   "devDependencies": {
     "@types/bun": "1.3.14",
     "@types/ejs": "3.1.5",
+    "oxfmt": "^0.62.0",
+    "oxlint": "^1.77.0",
     "typescript": "7.0.2",
     "vite": "8.2.2"
-  }
+  },
+  "engines": {
+    "bun": ">=1.2.0",
+    "node": ">=22.12.0",
+    "pnpm": ">=11.0.0 <12.0.0"
+  },
+   "packageManager": "pnpm@11.22.0+sha512.1ff870c4c6133dfd88fb2afc46dd13d47f09c9794b438c6fdb47ca98caf3bc16381ee0be93a091b8e3824cf01f889f46d7d9e20910fb0be1ab0fb5baa80dd621"
 }

@@ -4,3 +4,4 @@ public/dist/
 *.log
 .DS_Store
 .prequel/
+.idea/

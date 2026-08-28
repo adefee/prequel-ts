@@ -1,34 +1,43 @@
 // Read-only fetch of a GitHub PR's line-anchored review comments, via the
 // `gh` CLI. Never writes anything back to GitHub — the UI uses these purely
 // as read-only context for a local prequel comment (see client/comments.ts).
-import { execFile } from 'node:child_process';
-import { isSafeRefName } from './gitService';
-import type { CommentSide } from '../types';
+import { execFile } from "node:child_process";
+import type { CommentSide } from "../comments/commentStore";
+import { isSafeGhHost } from "./prConfig";
+import { isSafeRefName } from "./repository";
 
 function gh(repoRoot: string, args: string[], ghHost?: string | null): Promise<string> {
+  if (ghHost && !isSafeGhHost(ghHost)) {
+    return Promise.reject(new Error("invalid GitHub host"));
+  }
   const env = ghHost ? { ...process.env, GH_HOST: ghHost } : process.env;
   return new Promise((resolve, reject) => {
-    execFile('gh', args, { cwd: repoRoot, maxBuffer: 32 * 1024 * 1024, env }, (err, stdout, stderr) => {
-      if (!err) {
-        resolve(stdout);
-        return;
-      }
-      const code = (err as Error & { code?: unknown }).code;
-      if (code === 'ENOENT') {
-        reject(new Error('gh CLI not found — install it from https://cli.github.com'));
-        return;
-      }
-      reject(new Error(stderr.trim() || err.message));
-    });
+    execFile(
+      "gh",
+      args,
+      { cwd: repoRoot, maxBuffer: 32 * 1024 * 1024, env },
+      (err, stdout, stderr) => {
+        if (!err) {
+          resolve(stdout);
+          return;
+        }
+        const code = (err as Error & { code?: unknown }).code;
+        if (code === "ENOENT") {
+          reject(new Error("gh CLI not found — install it from https://cli.github.com"));
+          return;
+        }
+        reject(new Error(stderr.trim() || err.message));
+      },
+    );
   });
 }
 
-interface RawReviewComment {
+export interface RawReviewComment {
   id: number;
   path: string;
   line: number | null;
   original_line: number | null;
-  side: 'LEFT' | 'RIGHT';
+  side: "LEFT" | "RIGHT";
   body: string;
   user: { login: string } | null;
   html_url: string;
@@ -74,6 +83,10 @@ interface ResolvedThreadsResponse {
   };
 }
 
+function isNameWithOwner(value: string): boolean {
+  return /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(value);
+}
+
 // REST has no "resolved" field on a review comment; only the GraphQL thread
 // does. Best-effort: a failure here (older `gh`, missing scope) just means
 // resolved threads get imported too, not that the whole fetch fails.
@@ -81,32 +94,39 @@ async function fetchResolvedCommentIds(
   repoRoot: string,
   nameWithOwner: string,
   number: number,
-  ghHost?: string | null
+  ghHost?: string | null,
 ): Promise<Set<number>> {
-  const [owner, name] = nameWithOwner.split('/');
+  const [owner, name] = nameWithOwner.split("/");
+  if (!owner || !name) {
+    return new Set();
+  }
   try {
     const raw = await gh(
       repoRoot,
       [
-        'api',
-        'graphql',
-        '-f',
+        "api",
+        "graphql",
+        "-f",
         `query=${RESOLVED_THREADS_QUERY}`,
-        '-F',
+        "-F",
         `owner=${owner}`,
-        '-F',
+        "-F",
         `name=${name}`,
-        '-F',
+        "-F",
         `number=${number}`,
       ],
-      ghHost
+      ghHost,
     );
     const nodes = (JSON.parse(raw) as ResolvedThreadsResponse).data?.repository?.pullRequest
       ?.reviewThreads?.nodes;
     const ids = new Set<number>();
-    for (const t of nodes ?? []) {
-      if (!t.isResolved) continue;
-      for (const c of t.comments.nodes) ids.add(c.databaseId);
+    for (const thread of nodes ?? []) {
+      if (!thread.isResolved) {
+        continue;
+      }
+      for (const comment of thread.comments.nodes) {
+        ids.add(comment.databaseId);
+      }
     }
     return ids;
   } catch {
@@ -117,47 +137,66 @@ async function fetchResolvedCommentIds(
 // One GitHub review comment thread per gutter line — enough to anchor it next
 // to the matching local diff line; the ceiling is 100 review comments (one
 // page), which every PR this tool is meant for comfortably fits under.
-export async function fetchPrReviewComments(
-  repoRoot: string,
-  branch: string,
-  ghHost?: string | null
-): Promise<PrCommentThread[]> {
-  if (!isSafeRefName(branch)) throw new Error('unsafe branch name');
-  const numOut = await gh(repoRoot, ['pr', 'view', branch, '--json', 'number'], ghHost);
-  const { number } = JSON.parse(numOut) as { number: number };
-  const repoOut = await gh(repoRoot, ['repo', 'view', '--json', 'nameWithOwner'], ghHost);
-  const { nameWithOwner } = JSON.parse(repoOut) as { nameWithOwner: string };
-  const [raw, resolvedIds] = await Promise.all([
-    gh(repoRoot, ['api', `repos/${nameWithOwner}/pulls/${number}/comments?per_page=100`], ghHost),
-    fetchResolvedCommentIds(repoRoot, nameWithOwner, number, ghHost),
-  ]);
-  const comments = JSON.parse(raw) as RawReviewComment[];
-
+export function threadsFromReviewComments(
+  comments: RawReviewComment[],
+  resolvedIds: Set<number>,
+): PrCommentThread[] {
   const byThread = new Map<number, RawReviewComment[]>();
-  for (const c of comments) {
-    const key = c.in_reply_to_id ?? c.id;
-    if (!byThread.has(key)) byThread.set(key, []);
-    byThread.get(key)!.push(c);
+  for (const comment of comments) {
+    const key = comment.in_reply_to_id ?? comment.id;
+    if (!byThread.has(key)) {
+      byThread.set(key, []);
+    }
+    byThread.get(key)!.push(comment);
   }
 
   const threads: PrCommentThread[] = [];
   for (const group of byThread.values()) {
-    if (group.some((c) => resolvedIds.has(c.id))) continue; // resolved on GitHub already
+    if (group.some((comment) => resolvedIds.has(comment.id))) {
+      continue; // resolved on GitHub already
+    }
     group.sort((a, b) => a.created_at.localeCompare(b.created_at));
-    const rootLike = group.find((c) => !c.in_reply_to_id) ?? group[0]!;
+    const rootLike = group.find((comment) => !comment.in_reply_to_id) ?? group[0]!;
     const line = rootLike.line ?? rootLike.original_line;
-    if (!rootLike.path || !line) continue; // outdated position — nothing to anchor to
+    if (!rootLike.path || !line) {
+      continue; // outdated position — nothing to anchor to
+    }
     threads.push({
       path: rootLike.path,
-      side: rootLike.side === 'LEFT' ? 'old' : 'new',
+      side: rootLike.side === "LEFT" ? "old" : "new",
       line,
-      comments: group.map((c) => ({
-        author: c.user?.login ?? 'unknown',
-        body: c.body,
-        createdAt: c.created_at,
-        url: c.html_url,
+      comments: group.map((comment) => ({
+        author: comment.user?.login ?? "unknown",
+        body: comment.body,
+        createdAt: comment.created_at,
+        url: comment.html_url,
       })),
     });
   }
   return threads;
+}
+
+export async function fetchPrReviewComments(
+  repoRoot: string,
+  branch: string,
+  ghHost?: string | null,
+): Promise<PrCommentThread[]> {
+  if (!isSafeRefName(branch)) {
+    throw new Error("unsafe branch name");
+  }
+  const numOut = await gh(repoRoot, ["pr", "view", branch, "--json", "number"], ghHost);
+  const { number } = JSON.parse(numOut) as { number: number };
+  if (!Number.isInteger(number) || number <= 0) {
+    throw new Error("no open PR for this branch");
+  }
+  const repoOut = await gh(repoRoot, ["repo", "view", "--json", "nameWithOwner"], ghHost);
+  const { nameWithOwner } = JSON.parse(repoOut) as { nameWithOwner: string };
+  if (!nameWithOwner || !isNameWithOwner(nameWithOwner)) {
+    throw new Error("could not resolve GitHub repo");
+  }
+  const [raw, resolvedIds] = await Promise.all([
+    gh(repoRoot, ["api", `repos/${nameWithOwner}/pulls/${number}/comments?per_page=100`], ghHost),
+    fetchResolvedCommentIds(repoRoot, nameWithOwner, number, ghHost),
+  ]);
+  return threadsFromReviewComments(JSON.parse(raw) as RawReviewComment[], resolvedIds);
 }
