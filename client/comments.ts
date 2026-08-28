@@ -4,6 +4,7 @@
 
 import { closestFrom, escapeHtml, withRepoQuery } from './dom';
 import type { CommentSide, CommentWithHtml } from '../src/types';
+import type { PrCommentThread } from '../src/git/prComments';
 
 /** A comment as the API returns it (body plus rendered markdown). */
 type UiComment = CommentWithHtml;
@@ -26,6 +27,7 @@ const pageRepo = root.dataset.repo ?? '';
 
 const exportBtn = document.getElementById('export-btn') as HTMLButtonElement | null;
 const clearBtn = document.getElementById('clear-btn') as HTMLButtonElement | null;
+const importPrBtn = document.getElementById('import-pr-btn') as HTMLButtonElement | null;
 let commentCount = 0;
 
 const isSplitTable = (table: Element | null): boolean =>
@@ -472,6 +474,103 @@ async function loadComments(): Promise<void> {
   }
 }
 
+// --- imported GitHub PR review comments (read-only context) -----------
+// Not persisted as prequel Comments: they're fetched fresh each click and
+// exist only in the DOM. "Reply locally" opens the normal compose box at the
+// same line, which posts a normal local comment — nothing is sent to GitHub.
+function prThreadHtml(t: PrCommentThread): string {
+  const cards = t.comments
+    .map(
+      (c) =>
+        `<div class="pr-comment">` +
+        `<div class="pr-comment-header">` +
+        `<span class="pr-comment-author">${escapeHtml(c.author)}</span>` +
+        `<span class="comment-time">${escapeHtml(new Date(c.createdAt).toLocaleString())}</span>` +
+        `</div>` +
+        `<div class="pr-comment-body">${escapeHtml(c.body)}</div>` +
+        `</div>`
+    )
+    .join('');
+  return (
+    `<div class="pr-comment-thread" data-pr-path="${escapeHtml(t.path)}" data-pr-side="${t.side}" data-pr-line="${t.line}">` +
+    `<div class="pr-comment-badge">GitHub review comment</div>` +
+    cards +
+    `<button type="button" class="pr-comment-reply-btn">Reply locally</button>` +
+    `</div>`
+  );
+}
+
+// The diff body streams in after the header; anchoring against it before it
+// exists silently finds nothing (findAnchorCell returns null). Wait it out.
+function waitForDiffReady(): Promise<void> {
+  if (!root.classList.contains('is-booting')) return Promise.resolve();
+  return new Promise((resolve) => {
+    const obs = new MutationObserver(() => {
+      if (!root.classList.contains('is-booting')) {
+        obs.disconnect();
+        resolve();
+      }
+    });
+    obs.observe(root, { attributes: true, attributeFilter: ['class'] });
+  });
+}
+
+function renderPrThread(t: PrCommentThread): void {
+  const cell = findAnchorCell(t.path, t.side, t.line);
+  if (!cell) return; // line not present in the current diff view/mode
+  const row = cell.closest('tr');
+  if (!row) return;
+  const isSplit = isSplitTable(cell.closest('table'));
+  const html = `<tr class="comment-row pr-comment-row">${threadCells(isSplit, t.side, prThreadHtml(t))}</tr>`;
+  insertionPointAfter(row).insertAdjacentHTML('afterend', html);
+}
+
+// Remembered for the rest of this page load once the server confirms it (it
+// also persists server-side per repo, so a later session skips the prompt).
+let ghHost: string | null = null;
+
+async function runImportPr(hostOverride?: string): Promise<void> {
+  if (!importPrBtn) return;
+  importPrBtn.disabled = true;
+  importPrBtn.classList.add('is-busy');
+  document.querySelectorAll('.pr-comment-row').forEach((el) => el.remove());
+  try {
+    const params = new URLSearchParams({ branch });
+    const host = hostOverride ?? ghHost;
+    if (host) params.set('ghHost', host);
+    const res = await fetch(withRepoQuery(`/api/pr-comments?${params}`));
+    const data = (await res.json()) as {
+      threads?: PrCommentThread[];
+      ghHost?: string;
+      error?: string;
+    };
+    if (!res.ok) {
+      toast(data.error || 'Could not load PR comments.', {
+        label: 'Set GH host…',
+        fn: () => {
+          const entered = window.prompt('GitHub Enterprise hostname (e.g. github.example.com):');
+          if (entered?.trim()) void runImportPr(entered.trim());
+        },
+      });
+      return;
+    }
+    if (data.ghHost) ghHost = data.ghHost;
+    const threads = data.threads ?? [];
+    if (!threads.length) {
+      toast('No PR review comments found for this branch.');
+      return;
+    }
+    await waitForDiffReady();
+    threads.forEach(renderPrThread);
+    toast(`Imported ${threads.length} PR comment${threads.length === 1 ? '' : 's'}.`);
+  } catch {
+    toast('Could not load PR comments.');
+  } finally {
+    importPrBtn.disabled = false;
+    importPrBtn.classList.remove('is-busy');
+  }
+}
+
 async function runExport(): Promise<void> {
   if (commentCount === 0 || !exportBtn) return;
   exportBtn.disabled = true;
@@ -643,6 +742,7 @@ function sideOf(gutter: HTMLElement): CommentSide {
 function attachListeners(): void {
   if (exportBtn) exportBtn.addEventListener('click', () => void runExport());
   if (clearBtn) clearBtn.addEventListener('click', () => void runClear());
+  if (importPrBtn) importPrBtn.addEventListener('click', () => void runImportPr());
 
   document.addEventListener('click', (e) => {
     const add = closestFrom(e.target, '.add-comment');
@@ -702,6 +802,17 @@ function attachListeners(): void {
         compose = thread.querySelector('.comment-reply-compose');
       }
       compose?.querySelector<HTMLTextAreaElement>('.comment-input')?.focus();
+      return;
+    }
+
+    const prReply = closestFrom(e.target, '.pr-comment-reply-btn');
+    if (prReply) {
+      e.preventDefault();
+      const thread = prReply.closest<HTMLElement>('.pr-comment-thread');
+      const filePath = thread?.dataset.prPath;
+      const side = thread?.dataset.prSide === 'old' ? 'old' : 'new';
+      const line = Number(thread?.dataset.prLine);
+      if (filePath && Number.isFinite(line)) openLineCompose(filePath, side, line, line);
       return;
     }
 

@@ -23,6 +23,8 @@ import {
   resolveRepoRoot,
 } from './git/gitService';
 import { parseDiff, inferLanguage } from './git/diffParser';
+import { fetchPrReviewComments } from './git/prComments';
+import { getGhHost, setGhHost } from './git/prConfig';
 import { sampleDiff } from './sampleDiff';
 import {
   listComments,
@@ -514,6 +516,22 @@ export function createApp(options: ServerOptions = {}): (req: Request) => Promis
     return json({ from, eof, lines, html });
   }
 
+  // Read-only: line-anchored review comments from this branch's open GitHub
+  // PR, for the client to show as context next to the matching diff line.
+  async function getPrComments(req: Request, url: URL): Promise<Response> {
+    const scope = await requireRepo(req, url);
+    const repoRoot = scope.repoRoot!;
+    const branch = trimmedString(url.searchParams.get('branch'));
+    if (!branch) throw new HttpError(400, 'branch required');
+    // A passed ghHost (e.g. a GHE hostname) is remembered per repo so it only
+    // has to be typed once; omit it to reuse whatever was last saved.
+    const rawHost = trimmedString(url.searchParams.get('ghHost'));
+    if (rawHost) await setGhHost(repoRoot, rawHost);
+    const ghHost = rawHost || (await getGhHost(repoRoot));
+    const threads = await fetchPrReviewComments(repoRoot, branch, ghHost);
+    return json({ threads, ghHost });
+  }
+
   async function getCommentList(req: Request, url: URL): Promise<Response> {
     const scope = await scopeFromRequest(req, url);
     if (!scope.repoRoot) return json({ comments: [] });
@@ -695,6 +713,7 @@ export function createApp(options: ServerOptions = {}): (req: Request) => Promis
         if (pathname === '/api/context') return await getContext(req, url);
         if (pathname === '/api/branches') return await getBranches(req, url);
         if (pathname === '/api/comments') return await getCommentList(req, url);
+        if (pathname === '/api/pr-comments') return await getPrComments(req, url);
         if (pathname.startsWith('/static/')) {
           return await serveStatic(publicDir, pathname.slice('/static/'.length));
         }

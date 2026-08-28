@@ -596,6 +596,27 @@ html.is-loading body::after {
   cursor: default;
 }
 
+/* Import-PR-comments button (subnav) */
+.import-pr-btn {
+  flex: none;
+  font-size: 12px;
+  font-weight: 500;
+  padding: 3px 12px;
+  line-height: 20px;
+  border-radius: 6px;
+  border: 1px solid var(--borderColor-default, #d1d9e0);
+  color: var(--fgColor-default, #1f2328);
+  background-color: var(--bgColor-default, #fff);
+  cursor: pointer;
+}
+.import-pr-btn:hover {
+  background-color: var(--bgColor-muted, #f6f8fa);
+}
+.import-pr-btn:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
 /* Clear-comments button (subnav) */
 .clear-btn {
   flex: none;
@@ -1558,4 +1579,65 @@ html.is-loading body::after {
 }
 .comment-thread.is-resolved:hover {
   opacity: 1;
+}
+
+/* --- imported GitHub PR review comments: read-only context, distinct from
+   local comment threads (purple accent instead of the default border) --- */
+.pr-comment-thread {
+  max-width: 900px;
+  background-color: var(--bgColor-default, #fff);
+  border: 1px solid var(--borderColor-default, #d1d9e0);
+  border-left: 3px solid var(--borderColor-done-emphasis, #8250df);
+  border-radius: 6px;
+}
+
+.pr-comment-badge {
+  padding: 4px 12px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--fgColor-done, #8250df);
+  background-color: var(--bgColor-muted, #f6f8fa);
+  border-bottom: 1px solid var(--borderColor-default, #d1d9e0);
+  border-radius: 6px 6px 0 0;
+}
+
+.pr-comment + .pr-comment {
+  border-top: 1px solid var(--borderColor-muted, #d1d9e0);
+}
+
+.pr-comment-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px 0;
+  font-size: 12px;
+}
+
+.pr-comment-author {
+  font-weight: 600;
+  color: var(--fgColor-default, #1f2328);
+}
+
+.pr-comment-body {
+  padding: 4px 12px 8px;
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--fgColor-default, #1f2328);
+  white-space: pre-wrap;
+}
+
+.pr-comment-reply-btn {
+  display: block;
+  width: 100%;
+  text-align: left;
+  border: 0;
+  border-top: 1px solid var(--borderColor-muted, #d1d9e0);
+  background: transparent;
+  padding: 6px 12px;
+  color: var(--fgColor-muted, #59636e);
+  font-size: 12px;
+  cursor: pointer;
+}
+.pr-comment-reply-btn:hover {
+  color: var(--fgColor-accent, #0969da);
 }
