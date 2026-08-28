@@ -21,8 +21,9 @@ body {
 body {
   background-color: var(--bgColor-default, #ffffff);
   color: var(--fgColor-default, #1f2328);
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans",
-    Helvetica, Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji";
+  font-family:
+    -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans", Helvetica, Arial, sans-serif,
+    "Apple Color Emoji", "Segoe UI Emoji";
   font-size: 14px;
   line-height: 1.5;
 }
@@ -205,8 +206,8 @@ html.is-loading body::after {
 }
 
 .ref-pill {
-  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas,
-    "Liberation Mono", monospace;
+  font-family:
+    ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
   background-color: var(--bgColor-accent-muted, #ddf4ff);
   color: var(--fgColor-accent, #0969da);
   border-radius: 6px;
@@ -220,8 +221,8 @@ html.is-loading body::after {
   margin: 0;
   border: 1px solid transparent;
   font: inherit;
-  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas,
-    "Liberation Mono", monospace;
+  font-family:
+    ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
   line-height: inherit;
   cursor: pointer;
 }
@@ -264,8 +265,8 @@ html.is-loading body::after {
 }
 
 .ref-note code {
-  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas,
-    "Liberation Mono", monospace;
+  font-family:
+    ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
   font-size: 12px;
 }
 
@@ -318,8 +319,8 @@ html.is-loading body::after {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas,
-    "Liberation Mono", monospace;
+  font-family:
+    ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
 }
 
 .ref-option-meta {
@@ -373,8 +374,8 @@ html.is-loading body::after {
 }
 
 .repo-path {
-  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas,
-    "Liberation Mono", monospace;
+  font-family:
+    ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -469,8 +470,8 @@ html.is-loading body::after {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas,
-    "Liberation Mono", monospace;
+  font-family:
+    ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
 }
 
 .repo-shortcut-action {
@@ -517,8 +518,8 @@ html.is-loading body::after {
 }
 
 .repo-path-input {
-  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas,
-    "Liberation Mono", monospace;
+  font-family:
+    ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
   min-width: 16rem;
   max-width: 40vw;
   width: 40vw;
@@ -665,8 +666,8 @@ html.is-loading body::after {
 }
 
 .notice code {
-  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas,
-    "Liberation Mono", monospace;
+  font-family:
+    ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
   font-size: 12px;
   padding: 1px 5px;
   border-radius: 4px;
@@ -1013,8 +1014,8 @@ html.is-loading body::after {
 }
 
 .file-path {
-  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas,
-    "Liberation Mono", monospace;
+  font-family:
+    ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
   font-weight: 600;
   color: var(--fgColor-default, #1f2328);
   overflow: hidden;
@@ -1023,8 +1024,8 @@ html.is-loading body::after {
 }
 
 .file-rename {
-  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas,
-    "Liberation Mono", monospace;
+  font-family:
+    ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
   color: var(--fgColor-muted, #59636e);
 }
 
@@ -1090,8 +1091,8 @@ html.is-loading body::after {
   border-collapse: collapse;
   border-spacing: 0;
   table-layout: fixed;
-  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas,
-    "Liberation Mono", monospace;
+  font-family:
+    ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
   font-size: 12px;
   line-height: 20px;
   tab-size: 8;
@@ -1315,10 +1316,10 @@ html.is-loading body::after {
   background-color: var(--button-primary-bgColor-hover, #0860ca);
 }
 
-[data-comments-enabled='1'] .diff-table tr:hover .commentable .add-comment {
+[data-comments-enabled="1"] .diff-table tr:hover .commentable .add-comment {
   display: inline-flex;
 }
-[data-comments-enabled='1'] .diff-table tr:hover .commentable::before {
+[data-comments-enabled="1"] .diff-table tr:hover .commentable::before {
   visibility: hidden; /* hide the number while the + overlays the gutter */
 }
 
@@ -1408,7 +1409,8 @@ html.is-loading body::after {
   margin: 0 0 8px;
 }
 .comment-body code {
-  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+  font-family:
+    ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
   font-size: 85%;
   padding: 1px 5px;
   border-radius: 4px;
@@ -1556,7 +1558,7 @@ html.is-loading body::after {
 }
 
 /* A left accent makes Claude's replies scannable at a glance. */
-.comment[data-author='claude'] {
+.comment[data-author="claude"] {
   border-left: 3px solid var(--borderColor-accent-emphasis, #0969da);
 }
 
@@ -1591,4 +1593,3 @@ html.is-loading body::after {
 .comment-thread.is-resolved:hover {
   opacity: 1;
 }
-

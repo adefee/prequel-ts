@@ -1,6 +1,6 @@
 # prequel-ts
 
-*Review it before it's a pull request.*
+_Review it before it's a pull request._
 
 A TypeScript fork of [mdesjardins/prequel](https://github.com/mdesjardins/prequel). Same idea: a local web app that renders a Git repo's diff in a UI that looks like GitHub's Pull Request **Files changed** tab, with comments you can hand to Claude. This fork adds multi-project tabs, branch picking, and tighter git/security behavior.
 
@@ -14,11 +14,11 @@ A TypeScript fork of [mdesjardins/prequel](https://github.com/mdesjardins/preque
 
 **pnpm 11+.** Dependencies are installed with pnpm 11 (not Bun as the package manager). Settings live in `pnpm-workspace.yaml`: minimum release age, store integrity checks, and no unapproved lifecycle/build scripts.
 
-**Change target path in UI, server supports multiple instances/tabs on different paths**  Click the header path to open a different repo in *this* tab. The caret next to it saves and lists bookmarked paths (localStorage). One running server backs many browser tabs: each tab carries its own `?repo=<path>`, so switching a tab does not change the others.
+**Change target path in UI, server supports multiple instances/tabs on different paths** Click the header path to open a different repo in _this_ tab. The caret next to it saves and lists bookmarked paths (localStorage). One running server backs many browser tabs: each tab carries its own `?repo=<path>`, so switching a tab does not change the others.
 
 **File filter.** The file tree has a search box that filters the changed-file list as you type (substring match on the path). Empty folders drop out; Escape clears the query.
 
-**Branch compare.** The header pills list local branches. You can pick any local branch as the head or the base (`?head=` / `?base=`) without checking anything out. All / Branch / Working are consistent with that choice: the working-tree overlay only applies when the selected head *is* the checkout; comparing another branch stays a committed-ref diff. When the head is not checked out, the header says so.
+**Branch compare.** The header pills list local branches. You can pick any local branch as the head or the base (`?head=` / `?base=`) without checking anything out. All / Branch / Working are consistent with that choice: the working-tree overlay only applies when the selected head _is_ the checkout; comparing another branch stays a committed-ref diff. When the head is not checked out, the header says so.
 
 **Fetch freshness.** Each branch option shows when its upstream was last fetched (`fetched 12m ago`, `no remote`, …). Hover for the exact time and the tracking ref.
 
@@ -67,7 +67,7 @@ pnpm start -- install claude
 ```
 
 It goes in `~/.claude/skills` rather than a project's `.claude/skills` because you
-run prequel *against* other repos — pass `--project` to install into the current
+run prequel _against_ other repos — pass `--project` to install into the current
 repo instead, if you'd rather commit it and share it with a team. The command is
 idempotent, and refuses to overwrite a skill you've edited unless you pass
 `--force`. If an installed skill falls behind after an upgrade, prequel says so at
@@ -84,7 +84,7 @@ The page updates live over an event stream, so comments resolve and Claude's
 replies appear as it works — no reload. Append `?live=0` to the URL to opt out.
 
 Claude can reply in a thread as well as resolve it, which is where it explains a
-decision or says why it *didn't* make a change. Its messages are labelled and
+decision or says why it _didn't_ make a change. Its messages are labelled and
 accented so they're distinguishable from yours, and they never re-enter its own
 work queue. You can also resolve or reopen any comment yourself from the thread.
 
