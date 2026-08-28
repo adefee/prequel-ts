@@ -1,9 +1,9 @@
 // A hardcoded diff model shown when prequel is pointed at something that isn't
 // a git repo, so the UI still demonstrates the render pipeline and theming.
 
-import type { Diff } from './types';
+import type { ReviewDiff } from './types';
 
-export const sampleDiff: Diff = {
+export const sampleDiff: ReviewDiff = {
   base: 'main',
   head: 'feature/pricing-rules',
   files: [
@@ -16,6 +16,7 @@ export const sampleDiff: Diff = {
       language: 'typescript',
       additions: 4,
       deletions: 2,
+      mode: null,
       hunks: [
         {
           header: '@@ -12,7 +12,11 @@ export class PriceCalculator {',
@@ -47,6 +48,7 @@ export const sampleDiff: Diff = {
       language: 'typescript',
       additions: 5,
       deletions: 0,
+      mode: null,
       hunks: [
         {
           header: '@@ -0,0 +1,5 @@',
@@ -72,6 +74,7 @@ export const sampleDiff: Diff = {
       language: 'markdown',
       additions: 1,
       deletions: 1,
+      mode: null,
       hunks: [
         {
           header: '@@ -1,3 +1,3 @@',
@@ -96,6 +99,7 @@ export const sampleDiff: Diff = {
       language: null,
       additions: 0,
       deletions: 0,
+      mode: null,
       hunks: [],
     },
   ],

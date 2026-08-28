@@ -2,12 +2,14 @@
 // Supports unified (inline) and split (side-by-side) views.
 
 import type {
-  Diff,
-  DiffFile,
-  DiffLine,
+  RenderDiff,
+  RenderFile,
+  ReviewDiff,
+  ReviewFile,
+  RenderLine,
   DiffSummary,
   FileStatus,
-  Hunk,
+  RenderHunk,
   LineType,
   Rev,
   ViewMode,
@@ -29,7 +31,7 @@ const STATUS_LABEL: Record<FileStatus, string> = {
   copied: 'copied',
 };
 
-function diffStat(file: DiffFile): string {
+function diffStat(file: RenderFile): string {
   // GitHub's little green/red squares (max 5) proportional to churn.
   const total = file.additions + file.deletions;
   const blocks = 5;
@@ -83,7 +85,7 @@ const MARKER: Record<LineType, string> = { context: ' ', add: '+', del: '-' };
 
 // `line.html` is pre-highlighted (Shiki) and already escaped; otherwise escape
 // the raw content here.
-function codeCell(type: LineType, line: DiffLine, extraClass?: string): string {
+function codeCell(type: LineType, line: RenderLine, extraClass?: string): string {
   const cls =
     extraClass || `blob-code-${type === 'context' ? 'context' : type === 'add' ? 'addition' : 'deletion'}`;
   const inner = line.html != null ? line.html : escapeHtml(line.content);
@@ -99,7 +101,7 @@ function emptyCodeCell(): string {
 }
 
 // --- unified (inline) view ----------------------------------------------
-function renderUnifiedLine(line: DiffLine): string {
+function renderUnifiedLine(line: RenderLine): string {
   if (line.type === 'context') {
     return (
       '<tr>' +
@@ -136,7 +138,7 @@ const EXPAND_ICON =
 
 // Line numbers reached at the end of a hunk (for computing the gap above the
 // next hunk).
-function hunkNewEnd(hunk: Hunk): number {
+function hunkNewEnd(hunk: RenderHunk): number {
   for (let i = hunk.lines.length - 1; i >= 0; i--) {
     const n = hunk.lines[i]!.newNumber;
     if (n != null) return n;
@@ -147,7 +149,7 @@ function hunkNewEnd(hunk: Hunk): number {
 // A hunk-header row. `expandable` puts an expander in the gutter and metadata
 // on the row so the client can fetch the gap above this hunk.
 function hunkHeaderRow(
-  hunk: Hunk,
+  hunk: RenderHunk,
   ctx: RenderContext,
   prevNewEnd: number,
   { split }: { split: boolean }
@@ -167,7 +169,7 @@ function hunkHeaderRow(
   return `<tr class="hunk-header-row"${data}>${gutterCell}${codeCol}</tr>`;
 }
 
-function renderUnifiedTable(file: DiffFile, ctx: RenderContext): string {
+function renderUnifiedTable(file: RenderFile, ctx: RenderContext): string {
   let prevNewEnd = 0;
   let rows = '';
   for (const hunk of file.hunks) {
@@ -185,7 +187,7 @@ function renderUnifiedTable(file: DiffFile, ctx: RenderContext): string {
 // --- split (side-by-side) view ------------------------------------------
 // GitHub pairs a run of consecutive deletions with the following run of
 // additions row-by-row; leftover del/add lines get an empty cell opposite.
-function renderSplitPair(dels: DiffLine[], adds: DiffLine[]): string {
+function renderSplitPair(dels: RenderLine[], adds: RenderLine[]): string {
   let out = '';
   const n = Math.max(dels.length, adds.length);
   for (let i = 0; i < n; i++) {
@@ -202,10 +204,10 @@ function renderSplitPair(dels: DiffLine[], adds: DiffLine[]): string {
   return out;
 }
 
-function renderSplitHunkBody(hunk: Hunk): string {
+function renderSplitHunkBody(hunk: RenderHunk): string {
   let body = '';
-  let dels: DiffLine[] = [];
-  let adds: DiffLine[] = [];
+  let dels: RenderLine[] = [];
+  let adds: RenderLine[] = [];
   const flush = () => {
     if (dels.length || adds.length) {
       body += renderSplitPair(dels, adds);
@@ -235,7 +237,7 @@ function renderSplitHunkBody(hunk: Hunk): string {
   return body;
 }
 
-function renderSplitTable(file: DiffFile, ctx: RenderContext): string {
+function renderSplitTable(file: RenderFile, ctx: RenderContext): string {
   let prevNewEnd = 0;
   let rows = '';
   for (const hunk of file.hunks) {
@@ -251,16 +253,16 @@ function renderSplitTable(file: DiffFile, ctx: RenderContext): string {
 }
 
 // --- file + document ----------------------------------------------------
-function renderFileBody(file: DiffFile, view: ViewMode, rev: Rev | null): string {
+function renderFileBody(file: RenderFile, view: ViewMode, rev: Rev | null): string {
   if (file.isBinary) {
     return '<div class="binary-notice">Binary file not shown.</div>';
   }
-  const ctx: RenderContext = { path: file.newPath, rev };
+  const ctx: RenderContext = { path: file.newPath ?? file.oldPath, rev };
   return view === 'split' ? renderSplitTable(file, ctx) : renderUnifiedTable(file, ctx);
 }
 
-function renderFile(file: DiffFile, view: ViewMode, rev: Rev | null): string {
-  const filePath = escapeHtml(file.newPath);
+function renderFile(file: RenderFile, view: ViewMode, rev: Rev | null): string {
+  const filePath = escapeHtml(file.newPath ?? file.oldPath);
   const renamedFrom =
     file.status === 'renamed' && file.oldPath !== file.newPath
       ? `<span class="file-rename">${escapeHtml(file.oldPath)} → </span>`
@@ -307,10 +309,10 @@ function renderFile(file: DiffFile, view: ViewMode, rev: Rev | null): string {
 interface TreeNode {
   name: string;
   dirs: Map<string, TreeNode>;
-  files: Array<{ name: string; file: DiffFile }>;
+  files: Array<{ name: string; file: ReviewFile }>;
 }
 
-function buildTree(files: DiffFile[]): TreeNode {
+function buildTree(files: ReviewFile[]): TreeNode {
   const root: TreeNode = { name: '', dirs: new Map(), files: [] };
   for (const f of files) {
     const parts = (f.newPath || f.oldPath || '').split('/');
@@ -379,7 +381,7 @@ function renderTreeNode(node: TreeNode, depth: number): string {
   return html;
 }
 
-export function renderFileTree(diff: Diff): string {
+export function renderFileTree(diff: ReviewDiff): string {
   return renderTreeNode(buildTree(diff.files), 0);
 }
 
@@ -394,7 +396,7 @@ export interface RenderedDiff {
 }
 
 export function renderDiff(
-  diff: Diff,
+  diff: RenderDiff,
   { view = 'split', rev = null }: RenderDiffOptions = {}
 ): RenderedDiff {
   const summary: DiffSummary = {

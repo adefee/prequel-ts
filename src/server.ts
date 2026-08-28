@@ -25,13 +25,13 @@ import {
 import { parseDiff, inferLanguage } from './git/diffParser';
 import { sampleDiff } from './sampleDiff';
 import {
-  listComments,
-  addComment,
-  getComment,
-  updateComment,
-  deleteComment,
-  clearComments,
-  restoreCleared,
+  listComments as listCommentsStore,
+  addComment as addCommentStore,
+  getComment as getCommentStore,
+  updateComment as updateCommentStore,
+  deleteComment as deleteCommentStore,
+  clearComments as clearCommentsStore,
+  restoreCleared as restoreClearedStore,
 } from './comments/commentStore';
 import { renderCommentHtml } from './comments/commentHtml';
 import { buildMarkdown, buildJson } from './export/claudeExport';
@@ -44,7 +44,7 @@ import {
   type CommentSide,
   type CommentStatus,
   type CommentWithHtml,
-  type Diff,
+  type ReviewDiff,
   type DiffMode,
   type BranchInfo,
   type RepoScope,
@@ -189,6 +189,8 @@ export interface ServerOptions {
    * from it (HMR) instead of the built bundles in public/dist.
    */
   viteOrigin?: string | null;
+  /** Override persistent comment storage (tests use a temporary directory). */
+  commentDir?: string;
 }
 
 function viteOriginFromEnv(): string | null {
@@ -204,6 +206,14 @@ export function createApp(options: ServerOptions = {}): (req: Request) => Promis
   const defaultRepoRoot = options.repoRoot ?? null;
   const defaultBase = options.defaultBase ?? null;
   const viteOrigin = options.viteOrigin === undefined ? viteOriginFromEnv() : options.viteOrigin;
+  const commentDir = options.commentDir;
+  const listComments = (repo: string, branch?: string | null) => listCommentsStore(repo, branch, commentDir);
+  const addComment = (repo: string, data: Parameters<typeof addCommentStore>[1]) => addCommentStore(repo, data, commentDir);
+  const getComment = (repo: string, id: string) => getCommentStore(repo, id, commentDir);
+  const updateComment = (repo: string, id: string, patch: Parameters<typeof updateCommentStore>[2]) => updateCommentStore(repo, id, patch, commentDir);
+  const deleteComment = (repo: string, id: string) => deleteCommentStore(repo, id, commentDir);
+  const clearComments = (repo: string, branch?: string | null) => clearCommentsStore(repo, branch, commentDir);
+  const restoreCleared = (repo: string) => restoreClearedStore(repo, commentDir);
   // CLI-started default when a request omits ?repo= / body.repo / x-prequel-repo.
   // Only reachable on 127.0.0.1, but still unauthenticated.
   const defaultDisplayPath = defaultRepoRoot || process.cwd();
@@ -392,7 +402,7 @@ export function createApp(options: ServerOptions = {}): (req: Request) => Promis
         try {
           write(await ejs.renderFile(reviewStartTemplate, shellLocals));
 
-          let diff: Diff | null = null;
+          let diff: ReviewDiff | null = null;
           if (repoRoot) {
             try {
               const result = await getDiff(repoRoot, {
@@ -418,8 +428,7 @@ export function createApp(options: ServerOptions = {}): (req: Request) => Promis
             base = base || sampleDiff.base;
           }
 
-          annotateWordDiffs(diff);
-          await highlightDiff(diff);
+          const renderDiffModel = await highlightDiff(annotateWordDiffs(diff));
           const headIsCheckout = Boolean(
             repoRoot && head && (head === checkedOut || head === 'HEAD')
           );
@@ -427,7 +436,7 @@ export function createApp(options: ServerOptions = {}): (req: Request) => Promis
             repoRoot && (diffMode === 'branch' || (diffMode === 'all' && !headIsCheckout))
               ? head || 'HEAD'
               : 'WORKTREE';
-          const { filesHtml, summary } = renderDiff(diff, { view, rev });
+          const { filesHtml, summary } = renderDiff(renderDiffModel, { view, rev });
           const treeHtml = diff.files.length ? renderFileTree(diff) : '';
           write(
             await ejs.renderFile(reviewEndTemplate, {
@@ -637,7 +646,9 @@ export function createApp(options: ServerOptions = {}): (req: Request) => Promis
     // Replies (and anything Claude wrote) are conversation, not asks — the
     // export is the list of things being requested.
     const all = await listComments(repoRoot, branch);
-    const comments = all.filter((c) => !c.parentId && (c.author || 'user') === 'user');
+    const comments = all.filter(
+      (c) => !c.parentId && (c.author || 'user') === 'user' && (c.status || 'open') === 'open'
+    );
     if (!comments.length) return json({ count: 0, content: '', path: null });
 
     const content =

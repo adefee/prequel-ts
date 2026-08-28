@@ -13,7 +13,7 @@
 
 import { createHighlighter } from 'shiki';
 import type { BundledLanguage, Highlighter } from 'shiki';
-import type { CharRange, Diff } from '../types';
+import type { CharRange, RenderDiff } from '../types';
 
 const THEMES = { light: 'github-light', dark: 'github-dark' } as const;
 
@@ -138,10 +138,20 @@ export async function highlightLines(
   return tokensForText(hl, lines.join('\n'), lang).map((tl) => assembleLine(tl, null));
 }
 
-// Mutates the diff model, attaching pre-rendered `line.html` to code lines.
+// Returns a render projection with pre-rendered `line.html` on code lines.
 // Combines Shiki syntax tokens with word-diff ranges so both layers render
 // together. Word highlighting applies even when there's no language.
-export async function highlightDiff(diff: Diff): Promise<Diff> {
+export async function highlightDiff(input: RenderDiff): Promise<RenderDiff> {
+  const diff: RenderDiff = {
+    ...input,
+    files: input.files.map((file) => ({
+      ...file,
+      hunks: file.hunks.map((hunk) => ({
+        ...hunk,
+        lines: hunk.lines.map((line) => ({ ...line })),
+      })),
+    })),
+  };
   const langs = [...new Set(diff.files.map((f) => f.language).filter((l): l is string => Boolean(l)))];
   let hl: Highlighter | null = null;
   const usable = new Set<string>();

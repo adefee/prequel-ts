@@ -8,30 +8,36 @@ export type LineType = 'context' | 'add' | 'del';
 /** A `[start, end)` character range within a line. */
 export type CharRange = [number, number];
 
-export interface DiffLine {
+export interface ReviewLine {
   type: LineType;
   oldNumber: number | null;
   newNumber: number | null;
   content: string;
-  /** Intra-line changed ranges, attached by wordDiff. */
+}
+
+export interface RenderLine extends ReviewLine {
   wordRanges?: CharRange[];
-  /** Pre-rendered, already-escaped HTML, attached by the highlighter. */
+  /** Pre-rendered, already-escaped HTML. */
   html?: string;
 }
 
-export interface Hunk {
+export interface ReviewHunk {
   header: string;
   sectionHeading: string;
   oldStart: number;
   newStart: number;
   oldLines?: number;
   newLines?: number;
-  lines: DiffLine[];
+  lines: ReviewLine[];
+}
+
+export interface RenderHunk extends Omit<ReviewHunk, 'lines'> {
+  lines: RenderLine[];
 }
 
 export type FileStatus = 'added' | 'modified' | 'removed' | 'renamed' | 'copied';
 
-export interface DiffFile {
+export interface ReviewFile {
   id: string;
   oldPath: string | null;
   newPath: string | null;
@@ -41,14 +47,22 @@ export interface DiffFile {
   additions: number;
   deletions: number;
   /** Raw "old mode"/"new mode" header lines, when git reported them. */
-  mode?: string | null;
-  hunks: Hunk[];
+  mode: string | null;
+  hunks: ReviewHunk[];
 }
 
-export interface Diff {
-  files: DiffFile[];
+export interface RenderFile extends Omit<ReviewFile, 'hunks'> {
+  hunks: RenderHunk[];
+}
+
+export interface ReviewDiff {
+  files: ReviewFile[];
   base?: string;
   head?: string;
+}
+
+export interface RenderDiff extends Omit<ReviewDiff, 'files'> {
+  files: RenderFile[];
 }
 
 export interface DiffSummary {
