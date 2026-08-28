@@ -19,6 +19,7 @@ describe("parseDiff review mapping", () => {
     git(repo, "init", "-q");
     git(repo, "config", "user.email", "test@example.com");
     git(repo, "config", "user.name", "Test");
+    git(repo, "config", "commit.gpgsign", "false");
     await fs.writeFile(path.join(repo, "text.txt"), "old line\ncontext\n");
     await fs.writeFile(path.join(repo, "gone.md"), "gone\n");
     await fs.writeFile(path.join(repo, "old.md"), "move me\n");
