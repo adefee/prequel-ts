@@ -1,26 +1,33 @@
 // Renders a diff model into GitHub-"Files changed"-faithful HTML.
 // Supports unified (inline) and split (side-by-side) views.
 
-import type { FileStatus, LineType, ReviewDiff, ReviewFile, ReviewHunk, ReviewLine } from '../git/diff';
-import type { Rev } from '../git/repository';
+import type {
+  FileStatus,
+  LineType,
+  ReviewDiff,
+  ReviewFile,
+  ReviewHunk,
+  ReviewLine,
+} from "../git/diff";
+import type { Rev } from "../git/repository";
 
 export type CharRange = [number, number];
-export type ViewMode = 'split' | 'unified';
+export type ViewMode = "split" | "unified";
 
 export interface RenderLine extends ReviewLine {
   wordRanges?: CharRange[];
   html?: string;
 }
 
-export interface RenderHunk extends Omit<ReviewHunk, 'lines'> {
+export interface RenderHunk extends Omit<ReviewHunk, "lines"> {
   lines: RenderLine[];
 }
 
-export interface RenderFile extends Omit<ReviewFile, 'hunks'> {
+export interface RenderFile extends Omit<ReviewFile, "hunks"> {
   hunks: RenderHunk[];
 }
 
-export interface RenderDiff extends Omit<ReviewDiff, 'files'> {
+export interface RenderDiff extends Omit<ReviewDiff, "files"> {
   files: RenderFile[];
 }
 
@@ -32,18 +39,18 @@ interface DiffSummary {
 
 function escapeHtml(s: string | null | undefined): string {
   return String(s)
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;');
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
 }
 
 const STATUS_LABEL: Record<FileStatus, string> = {
-  added: 'added',
-  modified: '',
-  removed: 'deleted',
-  renamed: 'renamed',
-  copied: 'copied',
+  added: "added",
+  modified: "",
+  removed: "deleted",
+  renamed: "renamed",
+  copied: "copied",
 };
 
 function diffStat(file: RenderFile): string {
@@ -55,24 +62,37 @@ function diffStat(file: RenderFile): string {
   if (total > 0) {
     green = Math.round((file.additions / total) * blocks);
     red = Math.round((file.deletions / total) * blocks);
-    if (file.additions > 0 && green === 0) green = 1;
-    if (file.deletions > 0 && red === 0) red = 1;
+    if (file.additions > 0 && green === 0) {
+      green = 1;
+    }
+    if (file.deletions > 0 && red === 0) {
+      red = 1;
+    }
     while (green + red > blocks) {
-      if (green >= red) green--;
-      else red--;
+      if (green >= red) {
+        green--;
+      } else {
+        red--;
+      }
     }
   }
   const neutral = blocks - green - red;
-  let squares = '';
-  for (let i = 0; i < green; i++) squares += '<span class="diffstat-block diffstat-block-add"></span>';
-  for (let i = 0; i < red; i++) squares += '<span class="diffstat-block diffstat-block-del"></span>';
-  for (let i = 0; i < neutral; i++) squares += '<span class="diffstat-block diffstat-block-neutral"></span>';
+  let squares = "";
+  for (let i = 0; i < green; i++) {
+    squares += '<span class="diffstat-block diffstat-block-add"></span>';
+  }
+  for (let i = 0; i < red; i++) {
+    squares += '<span class="diffstat-block diffstat-block-del"></span>';
+  }
+  for (let i = 0; i < neutral; i++) {
+    squares += '<span class="diffstat-block diffstat-block-neutral"></span>';
+  }
   return `<span class="diffstat" aria-label="${total} changes">${squares}</span>`;
 }
 
 /** Marks a gutter cell as commentable (hover "+" plus the client's anchor data). */
 interface CommentAnchor {
-  side: 'old' | 'new';
+  side: "old" | "new";
   line: number | null;
 }
 
@@ -84,7 +104,7 @@ interface RenderContext {
 
 // --- cell builders -------------------------------------------------------
 function numCell(number: number | null, extraClass: string, comment?: CommentAnchor): string {
-  const numAttr = number == null ? '' : ` data-line-number="${number}"`;
+  const numAttr = number == null ? "" : ` data-line-number="${number}"`;
   if (comment) {
     return (
       `<td class="blob-num ${extraClass} commentable" data-side="${comment.side}"` +
@@ -96,13 +116,14 @@ function numCell(number: number | null, extraClass: string, comment?: CommentAnc
   return `<td class="blob-num ${extraClass}"${numAttr}></td>`;
 }
 
-const MARKER: Record<LineType, string> = { context: ' ', add: '+', del: '-' };
+const MARKER: Record<LineType, string> = { context: " ", add: "+", del: "-" };
 
 // `line.html` is pre-highlighted (Shiki) and already escaped; otherwise escape
 // the raw content here.
 function codeCell(type: LineType, line: RenderLine, extraClass?: string): string {
   const cls =
-    extraClass || `blob-code-${type === 'context' ? 'context' : type === 'add' ? 'addition' : 'deletion'}`;
+    extraClass ||
+    `blob-code-${type === "context" ? "context" : type === "add" ? "addition" : "deletion"}`;
   const inner = line.html != null ? line.html : escapeHtml(line.content);
   return `<td class="blob-code ${cls}"><span class="blob-code-inner"><span class="marker">${MARKER[type]}</span>${inner}</span></td>`;
 }
@@ -117,34 +138,34 @@ function emptyCodeCell(): string {
 
 // --- unified (inline) view ----------------------------------------------
 function renderUnifiedLine(line: RenderLine): string {
-  if (line.type === 'context') {
+  if (line.type === "context") {
     return (
-      '<tr>' +
-      numCell(line.oldNumber, 'blob-num-context') +
-      numCell(line.newNumber, 'blob-num-context', { side: 'new', line: line.newNumber }) +
-      codeCell('context', line) +
-      '</tr>'
+      "<tr>" +
+      numCell(line.oldNumber, "blob-num-context") +
+      numCell(line.newNumber, "blob-num-context", { side: "new", line: line.newNumber }) +
+      codeCell("context", line) +
+      "</tr>"
     );
   }
-  if (line.type === 'del') {
+  if (line.type === "del") {
     return (
-      '<tr>' +
-      numCell(line.oldNumber, 'blob-num-deletion', { side: 'old', line: line.oldNumber }) +
-      numCell(null, 'blob-num-deletion') +
-      codeCell('del', line) +
-      '</tr>'
+      "<tr>" +
+      numCell(line.oldNumber, "blob-num-deletion", { side: "old", line: line.oldNumber }) +
+      numCell(null, "blob-num-deletion") +
+      codeCell("del", line) +
+      "</tr>"
     );
   }
-  if (line.type === 'add') {
+  if (line.type === "add") {
     return (
-      '<tr>' +
-      numCell(null, 'blob-num-addition') +
-      numCell(line.newNumber, 'blob-num-addition', { side: 'new', line: line.newNumber }) +
-      codeCell('add', line) +
-      '</tr>'
+      "<tr>" +
+      numCell(null, "blob-num-addition") +
+      numCell(line.newNumber, "blob-num-addition", { side: "new", line: line.newNumber }) +
+      codeCell("add", line) +
+      "</tr>"
     );
   }
-  return '';
+  return "";
 }
 
 // SVG "unfold" icon shown in the hunk-header gutter to expand context.
@@ -156,7 +177,9 @@ const EXPAND_ICON =
 function hunkNewEnd(hunk: RenderHunk): number {
   for (let i = hunk.lines.length - 1; i >= 0; i--) {
     const n = hunk.lines[i]!.newNumber;
-    if (n != null) return n;
+    if (n != null) {
+      return n;
+    }
   }
   return hunk.newStart - 1;
 }
@@ -167,7 +190,7 @@ function hunkHeaderRow(
   hunk: RenderHunk,
   ctx: RenderContext,
   prevNewEnd: number,
-  { split }: { split: boolean }
+  { split }: { split: boolean },
 ): string {
   const gapAbove = hunk.newStart - 1 - prevNewEnd; // >0 when there's hidden context
   const expandable = ctx.rev && gapAbove > 0;
@@ -175,21 +198,21 @@ function hunkHeaderRow(
     ? ` data-expander data-path="${escapeHtml(ctx.path)}" data-rev="${escapeHtml(ctx.rev)}"` +
       ` data-new-start="${hunk.newStart}" data-old-start="${hunk.oldStart}"` +
       ` data-prev-new-end="${prevNewEnd}"`
-    : '';
+    : "";
   const gutter = expandable
     ? `<button class="expander" title="Expand context" aria-label="Expand context">${EXPAND_ICON}</button>`
-    : '';
+    : "";
   const gutterCell = `<td class="blob-num blob-num-hunk blob-num-expand" colspan="${split ? 1 : 2}">${gutter}</td>`;
-  const codeCol = `<td class="blob-code blob-code-hunk"${split ? ' colspan="3"' : ''}>${escapeHtml(hunk.header)}</td>`;
+  const codeCol = `<td class="blob-code blob-code-hunk"${split ? ' colspan="3"' : ""}>${escapeHtml(hunk.header)}</td>`;
   return `<tr class="hunk-header-row"${data}>${gutterCell}${codeCol}</tr>`;
 }
 
 function renderUnifiedTable(file: RenderFile, ctx: RenderContext): string {
   let prevNewEnd = 0;
-  let rows = '';
+  let rows = "";
   for (const hunk of file.hunks) {
     rows += hunkHeaderRow(hunk, ctx, prevNewEnd, { split: false });
-    rows += hunk.lines.map(renderUnifiedLine).join('');
+    rows += hunk.lines.map(renderUnifiedLine).join("");
     prevNewEnd = hunkNewEnd(hunk);
   }
   return (
@@ -203,16 +226,18 @@ function renderUnifiedTable(file: RenderFile, ctx: RenderContext): string {
 // GitHub pairs a run of consecutive deletions with the following run of
 // additions row-by-row; leftover del/add lines get an empty cell opposite.
 function renderSplitPair(dels: RenderLine[], adds: RenderLine[]): string {
-  let out = '';
+  let out = "";
   const n = Math.max(dels.length, adds.length);
   for (let i = 0; i < n; i++) {
     const d = dels[i];
     const a = adds[i];
     const left = d
-      ? numCell(d.oldNumber, 'blob-num-deletion', { side: 'old', line: d.oldNumber }) + codeCell('del', d)
+      ? numCell(d.oldNumber, "blob-num-deletion", { side: "old", line: d.oldNumber }) +
+        codeCell("del", d)
       : emptyNumCell() + emptyCodeCell();
     const right = a
-      ? numCell(a.newNumber, 'blob-num-addition', { side: 'new', line: a.newNumber }) + codeCell('add', a)
+      ? numCell(a.newNumber, "blob-num-addition", { side: "new", line: a.newNumber }) +
+        codeCell("add", a)
       : emptyNumCell() + emptyCodeCell();
     out += `<tr>${left}${right}</tr>`;
   }
@@ -220,7 +245,7 @@ function renderSplitPair(dels: RenderLine[], adds: RenderLine[]): string {
 }
 
 function renderSplitHunkBody(hunk: RenderHunk): string {
-  let body = '';
+  let body = "";
   let dels: RenderLine[] = [];
   let adds: RenderLine[] = [];
   const flush = () => {
@@ -232,20 +257,20 @@ function renderSplitHunkBody(hunk: RenderHunk): string {
   };
 
   for (const line of hunk.lines) {
-    if (line.type === 'del') {
+    if (line.type === "del") {
       dels.push(line);
-    } else if (line.type === 'add') {
+    } else if (line.type === "add") {
       adds.push(line);
     } else {
       // context line: flush any pending change block, then emit both sides
       flush();
       body +=
-        '<tr>' +
-        numCell(line.oldNumber, 'blob-num-context') +
-        codeCell('context', line) +
-        numCell(line.newNumber, 'blob-num-context', { side: 'new', line: line.newNumber }) +
-        codeCell('context', line) +
-        '</tr>';
+        "<tr>" +
+        numCell(line.oldNumber, "blob-num-context") +
+        codeCell("context", line) +
+        numCell(line.newNumber, "blob-num-context", { side: "new", line: line.newNumber }) +
+        codeCell("context", line) +
+        "</tr>";
     }
   }
   flush();
@@ -254,7 +279,7 @@ function renderSplitHunkBody(hunk: RenderHunk): string {
 
 function renderSplitTable(file: RenderFile, ctx: RenderContext): string {
   let prevNewEnd = 0;
-  let rows = '';
+  let rows = "";
   for (const hunk of file.hunks) {
     rows += hunkHeaderRow(hunk, ctx, prevNewEnd, { split: true });
     rows += renderSplitHunkBody(hunk);
@@ -273,18 +298,18 @@ function renderFileBody(file: RenderFile, view: ViewMode, rev: Rev | null): stri
     return '<div class="binary-notice">Binary file not shown.</div>';
   }
   const ctx: RenderContext = { path: file.newPath ?? file.oldPath, rev };
-  return view === 'split' ? renderSplitTable(file, ctx) : renderUnifiedTable(file, ctx);
+  return view === "split" ? renderSplitTable(file, ctx) : renderUnifiedTable(file, ctx);
 }
 
 function renderFile(file: RenderFile, view: ViewMode, rev: Rev | null): string {
   const filePath = escapeHtml(file.newPath ?? file.oldPath);
   const renamedFrom =
-    file.status === 'renamed' && file.oldPath !== file.newPath
+    file.status === "renamed" && file.oldPath !== file.newPath
       ? `<span class="file-rename">${escapeHtml(file.oldPath)} → </span>`
-      : '';
+      : "";
   const statusLabel = STATUS_LABEL[file.status]
     ? `<span class="file-status-tag file-status-${file.status}">${STATUS_LABEL[file.status]}</span>`
-    : '';
+    : "";
   const counts =
     `<span class="file-additions">+${file.additions}</span>` +
     `<span class="file-deletions">−${file.deletions}</span>`;
@@ -328,13 +353,15 @@ interface TreeNode {
 }
 
 function buildTree(files: ReviewFile[]): TreeNode {
-  const root: TreeNode = { name: '', dirs: new Map(), files: [] };
+  const root: TreeNode = { name: "", dirs: new Map(), files: [] };
   for (const f of files) {
-    const parts = (f.newPath || f.oldPath || '').split('/');
-    const fileName = parts.pop() ?? '';
+    const parts = (f.newPath || f.oldPath || "").split("/");
+    const fileName = parts.pop() ?? "";
     let node = root;
     for (const part of parts) {
-      if (!node.dirs.has(part)) node.dirs.set(part, { name: part, dirs: new Map(), files: [] });
+      if (!node.dirs.has(part)) {
+        node.dirs.set(part, { name: part, dirs: new Map(), files: [] });
+      }
       node = node.dirs.get(part)!;
     }
     node.files.push({ name: fileName, file: f });
@@ -349,7 +376,7 @@ function compressTree(node: TreeNode): void {
   for (let dir of node.dirs.values()) {
     while (dir.files.length === 0 && dir.dirs.size === 1) {
       const child = [...dir.dirs.values()][0]!;
-      child.name = dir.name + '/' + child.name;
+      child.name = dir.name + "/" + child.name;
       dir = child;
     }
     compressTree(dir);
@@ -366,7 +393,7 @@ const CHECK_ICON =
   '<svg viewBox="0 0 16 16" width="12" height="12" aria-hidden="true"><path d="M13.78 4.22a.75.75 0 0 1 0 1.06l-7.25 7.25a.75.75 0 0 1-1.06 0L2.22 9.28a.751.751 0 0 1 .018-1.042.751.751 0 0 1 1.042-.018L6 10.94l6.72-6.72a.75.75 0 0 1 1.06 0Z"></path></svg>';
 
 function renderTreeNode(node: TreeNode, depth: number): string {
-  let html = '';
+  let html = "";
   const dirs = [...node.dirs.values()].sort((a, b) => a.name.localeCompare(b.name));
   for (const dir of dirs) {
     const pad = 8 + depth * 14;
@@ -412,13 +439,13 @@ export interface RenderedDiff {
 
 export function renderDiff(
   diff: RenderDiff,
-  { view = 'split', rev = null }: RenderDiffOptions = {}
+  { view = "split", rev = null }: RenderDiffOptions = {},
 ): RenderedDiff {
   const summary: DiffSummary = {
     fileCount: diff.files.length,
     additions: diff.files.reduce((a, f) => a + f.additions, 0),
     deletions: diff.files.reduce((a, f) => a + f.deletions, 0),
   };
-  const filesHtml = diff.files.map((f) => renderFile(f, view, rev)).join('\n');
+  const filesHtml = diff.files.map((f) => renderFile(f, view, rev)).join("\n");
   return { filesHtml, summary };
 }

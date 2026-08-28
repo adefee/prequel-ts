@@ -2,17 +2,22 @@
   "name": "@adefee/prequel-ts",
   "version": "0.3.1",
   "description": "Review it before it's a pull request — a local, GitHub-style diff reviewer (TypeScript fork)",
-  "type": "module",
-  "license": "GPL-3.0-or-later",
-  "author": "Mike Desjardins",
-  "packageManager": "pnpm@11.22.0",
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/adefee/prequel-ts.git"
-  },
+  "keywords": [
+    "cli",
+    "code-review",
+    "diff",
+    "git",
+    "pull-request"
+  ],
   "homepage": "https://github.com/adefee/prequel-ts#readme",
   "bugs": {
     "url": "https://github.com/adefee/prequel-ts/issues"
+  },
+  "license": "GPL-3.0-or-later",
+  "author": "Mike Desjardins",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/adefee/prequel-ts.git"
   },
   "bin": {
     "prequel-ts": "bin/prequel.ts"
@@ -24,21 +29,10 @@
     "public",
     "skills"
   ],
-  "engines": {
-    "bun": ">=1.2.0",
-    "node": ">=22.12.0",
-    "pnpm": ">=11.0.0 <12.0.0"
-  },
+  "type": "module",
   "publishConfig": {
     "access": "public"
   },
-  "keywords": [
-    "git",
-    "diff",
-    "code-review",
-    "pull-request",
-    "cli"
-  ],
   "scripts": {
     "start": "bun bin/prequel.ts",
     "dev": "bun scripts/dev.ts",
@@ -48,7 +42,7 @@
     "lint": "oxlint .",
     "format": "oxfmt --write .",
     "format:check": "oxfmt --check .",
-    "check": "pnpm typecheck && pnpm test && pnpm build"
+    "check": "pnpm format:check && pnpm lint && pnpm typecheck && pnpm test && pnpm build"
   },
   "dependencies": {
     "@primer/primitives": "^10.5.0",
@@ -66,5 +60,11 @@
     "oxlint": "^1.77.0",
     "typescript": "7.0.2",
     "vite": "8.2.2"
-  }
+  },
+  "engines": {
+    "bun": ">=1.2.0",
+    "node": ">=22.12.0",
+    "pnpm": ">=11.0.0 <12.0.0"
+  },
+  "packageManager": "pnpm@11.22.0"
 }

@@ -2,8 +2,8 @@
 // a file-level comment), save, render as inline threads, delete. Plus bulk
 // clear (with undo) and export-then-clear, for the review→hand-off→re-review loop.
 
-import { closestFrom, escapeHtml, withRepoQuery } from './dom';
-import type { Comment, CommentSide } from '../src/comments/commentStore';
+import type { Comment, CommentSide } from "../src/comments/commentStore";
+import { closestFrom, escapeHtml, withRepoQuery } from "./dom";
 
 /** A comment as the API returns it (body plus rendered markdown). */
 type UiComment = Comment & { bodyHtml: string };
@@ -15,30 +15,32 @@ interface EventBase {
 }
 
 type ServerEvent =
-  | (EventBase & { type: 'comment.created' | 'comment.updated'; comment: UiComment })
-  | (EventBase & { type: 'comment.deleted'; id: string })
-  | (EventBase & { type: 'comments.reset' });
+  | (EventBase & { type: "comment.created" | "comment.updated"; comment: UiComment })
+  | (EventBase & { type: "comment.deleted"; id: string })
+  | (EventBase & { type: "comments.reset" });
 
 const root = document.documentElement;
-const commentsEnabled = root.dataset.commentsEnabled === '1';
-const branch = root.dataset.branch ?? '';
-const pageRepo = root.dataset.repo ?? '';
+const commentsEnabled = root.dataset.commentsEnabled === "1";
+const branch = root.dataset.branch ?? "";
+const pageRepo = root.dataset.repo ?? "";
 
-const exportBtn = document.getElementById('export-btn') as HTMLButtonElement | null;
-const clearBtn = document.getElementById('clear-btn') as HTMLButtonElement | null;
+const exportBtn = document.getElementById("export-btn") as HTMLButtonElement | null;
+const clearBtn = document.getElementById("clear-btn") as HTMLButtonElement | null;
 let commentCount = 0;
 
 const isSplitTable = (table: Element | null): boolean =>
-  table?.classList.contains('diff-table-split') ?? false;
+  table?.classList.contains("diff-table-split") ?? false;
 
 // Identifies this tab so it can ignore the echo of its own mutations coming
 // back over the event stream (it already applied them locally).
 const CLIENT_ID = crypto.randomUUID?.() ?? String(Math.random());
-const jsonHeaders = () => ({ 'content-type': 'application/json', 'x-prequel-client': CLIENT_ID });
-const clientHeaders = () => ({ 'x-prequel-client': CLIENT_ID });
+const jsonHeaders = () => ({ "content-type": "application/json", "x-prequel-client": CLIENT_ID });
+const clientHeaders = () => ({ "x-prequel-client": CLIENT_ID });
 
 function eventTargetsThisTab(msg: EventBase): boolean {
-  if (!msg.repoRoot && !msg.displayPath) return true;
+  if (!msg.repoRoot && !msg.displayPath) {
+    return true;
+  }
   return msg.displayPath === pageRepo || msg.repoRoot === pageRepo;
 }
 
@@ -48,10 +50,12 @@ function updateButtons(): void {
     exportBtn.hidden = commentCount === 0;
     exportBtn.textContent =
       commentCount === 1
-        ? 'Export 1 comment for Claude'
+        ? "Export 1 comment for Claude"
         : `Export ${commentCount} comments for Claude`;
   }
-  if (clearBtn) clearBtn.hidden = commentCount === 0;
+  if (clearBtn) {
+    clearBtn.hidden = commentCount === 0;
+  }
 }
 
 // --- toast (with optional action) --------------------------------------
@@ -63,17 +67,19 @@ interface ToastAction {
 let toastTimer: ReturnType<typeof setTimeout> | undefined;
 
 function toast(message: string, action?: ToastAction): void {
-  const el = document.getElementById('toast');
-  if (!el) return;
-  el.textContent = '';
-  const span = document.createElement('span');
+  const el = document.getElementById("toast");
+  if (!el) {
+    return;
+  }
+  el.textContent = "";
+  const span = document.createElement("span");
   span.textContent = message;
   el.appendChild(span);
   if (action) {
-    const btn = document.createElement('button');
-    btn.className = 'toast-action';
+    const btn = document.createElement("button");
+    btn.className = "toast-action";
     btn.textContent = action.label;
-    btn.addEventListener('click', () => {
+    btn.addEventListener("click", () => {
       el.hidden = true;
       action.fn();
     });
@@ -91,42 +97,42 @@ function timeLabel(c: UiComment): string {
   try {
     return new Date(c.createdAt).toLocaleString();
   } catch {
-    return '';
+    return "";
   }
 }
 
 function commentCardHtml(c: UiComment, { isRoot }: { isRoot: boolean }): string {
-  const author = c.author === 'claude' ? 'claude' : 'you';
+  const author = c.author === "claude" ? "claude" : "you";
   const range =
-    isRoot && c.side !== 'file' && c.endLine > c.startLine
+    isRoot && c.side !== "file" && c.endLine > c.startLine
       ? `<span class="comment-lines">Lines ${c.startLine}–${c.endLine}</span>`
-      : '';
-  const resolved = isRoot && c.status === 'resolved';
+      : "";
+  const resolved = isRoot && c.status === "resolved";
   const tools = isRoot
-    ? `<button class="comment-resolve">${resolved ? 'Reopen' : 'Resolve'}</button>` +
+    ? `<button class="comment-resolve">${resolved ? "Reopen" : "Resolve"}</button>` +
       `<button class="comment-reply-btn">Reply</button>`
-    : '';
+    : "";
   return (
     `<div class="comment" data-comment-id="${c.id}" data-author="${author}">` +
     `<div class="comment-header">` +
-    `<span class="comment-author comment-author-${author}">${author === 'claude' ? 'Claude' : 'You'}</span>` +
+    `<span class="comment-author comment-author-${author}">${author === "claude" ? "Claude" : "You"}</span>` +
     range +
     `<span class="comment-time">${escapeHtml(timeLabel(c))}</span>` +
-    (resolved ? '<span class="comment-resolved-pill">Resolved</span>' : '') +
+    (resolved ? '<span class="comment-resolved-pill">Resolved</span>' : "") +
     `<span class="comment-tools">${tools}` +
     `<button class="comment-delete" title="Delete comment">Delete</button></span>` +
     `</div>` +
-    `<div class="comment-body markdown-body">${c.bodyHtml || escapeHtml(c.body || '')}</div>` +
+    `<div class="comment-body markdown-body">${c.bodyHtml || escapeHtml(c.body || "")}</div>` +
     `</div>`
   );
 }
 
 function threadInner(rootComment: UiComment, replies?: UiComment[]): string {
   const cards = [commentCardHtml(rootComment, { isRoot: true })].concat(
-    (replies ?? []).map((r) => commentCardHtml(r, { isRoot: false }))
+    (replies ?? []).map((r) => commentCardHtml(r, { isRoot: false })),
   );
-  const cls = rootComment.status === 'resolved' ? ' is-resolved' : '';
-  return `<div class="comment-thread${cls}" data-root-id="${rootComment.id}">${cards.join('')}</div>`;
+  const cls = rootComment.status === "resolved" ? " is-resolved" : "";
+  return `<div class="comment-thread${cls}" data-root-id="${rootComment.id}">${cards.join("")}</div>`;
 }
 
 function composeInner(): string {
@@ -143,10 +149,12 @@ function composeInner(): string {
 // Unified spans the code column (colspan 3); split confines the thread to the
 // side it was made on (2 of 4 columns), leaving the other side empty.
 function threadCells(isSplit: boolean, side: CommentSide, inner: string): string {
-  if (!isSplit) return `<td class="comment-cell" colspan="3">${inner}</td>`;
+  if (!isSplit) {
+    return `<td class="comment-cell" colspan="3">${inner}</td>`;
+  }
   const cell = `<td class="comment-cell" colspan="2">${inner}</td>`;
   const empty = '<td class="comment-cell-empty" colspan="2"></td>';
-  return side === 'old' ? cell + empty : empty + cell;
+  return side === "old" ? cell + empty : empty + cell;
 }
 
 const commentRowHtml = (c: UiComment, isSplit: boolean, replies?: UiComment[]): string =>
@@ -157,28 +165,34 @@ const fileCommentHtml = (c: UiComment, replies?: UiComment[]): string =>
 // --- anchoring helpers -------------------------------------------------
 function findAnchorCell(filePath: string, side: string, line: number): HTMLElement | null {
   const file = document.querySelector(`.file[data-path="${CSS.escape(filePath)}"]`);
-  if (!file) return null;
+  if (!file) {
+    return null;
+  }
   return file.querySelector<HTMLElement>(
-    `.blob-num.commentable[data-side="${side}"][data-comment-line="${line}"]`
+    `.blob-num.commentable[data-side="${side}"][data-comment-line="${line}"]`,
   );
 }
 
 // The code cell that belongs to a gutter cell (same row, next .blob-code).
 function codeCellFor(gutterCell: HTMLElement): Element | null {
-  const row = gutterCell.closest('tr');
-  if (!row) return null;
+  const row = gutterCell.closest("tr");
+  if (!row) {
+    return null;
+  }
   const cells = [...row.children];
   const start = cells.indexOf(gutterCell);
   for (let i = start + 1; i < cells.length; i++) {
-    if (cells[i]!.classList.contains('blob-code')) return cells[i]!;
+    if (cells[i]!.classList.contains("blob-code")) {
+      return cells[i]!;
+    }
   }
   return null;
 }
 
 function snapshotFor(gutterCell: HTMLElement): string {
   const code = codeCellFor(gutterCell);
-  const inner = code?.querySelector('.blob-code-inner');
-  return inner ? (inner.textContent ?? '').slice(1) : ''; // drop the +/-/space marker
+  const inner = code?.querySelector(".blob-code-inner");
+  return inner ? (inner.textContent ?? "").slice(1) : ""; // drop the +/-/space marker
 }
 
 // Capture every line's code across a range on one side (for export context).
@@ -186,32 +200,36 @@ function snapshotForRange(filePath: string, side: string, lo: number, hi: number
   const out: string[] = [];
   for (let n = lo; n <= hi; n++) {
     const cell = findAnchorCell(filePath, side, n);
-    if (cell) out.push(snapshotFor(cell));
+    if (cell) {
+      out.push(snapshotFor(cell));
+    }
   }
-  return out.length ? out : [''];
+  return out.length ? out : [""];
 }
 
 // Tint the selected line range (gutter + code) while composing / dragging.
 function clearRangeHighlight(): void {
-  document
-    .querySelectorAll('.mq-range-line')
-    .forEach((el) => el.classList.remove('mq-range-line'));
+  document.querySelectorAll(".mq-range-line").forEach((el) => el.classList.remove("mq-range-line"));
 }
 
 function highlightRange(filePath: string, side: string, lo: number, hi: number): void {
   clearRangeHighlight();
-  if (hi <= lo) return;
+  if (hi <= lo) {
+    return;
+  }
   for (let n = lo; n <= hi; n++) {
     const g = findAnchorCell(filePath, side, n);
-    if (!g) continue;
-    g.classList.add('mq-range-line');
-    codeCellFor(g)?.classList.add('mq-range-line');
+    if (!g) {
+      continue;
+    }
+    g.classList.add("mq-range-line");
+    codeCellFor(g)?.classList.add("mq-range-line");
   }
 }
 
 function insertionPointAfter(row: Element): Element {
   let last = row;
-  while (last.nextElementSibling?.classList.contains('comment-row')) {
+  while (last.nextElementSibling?.classList.contains("comment-row")) {
     last = last.nextElementSibling;
   }
   return last;
@@ -225,34 +243,36 @@ function openLineCompose(filePath: string, side: CommentSide, a: number, b: numb
   const hi = Math.max(a, b);
 
   // Re-focus if the identical range is already being composed.
-  const same = [...document.querySelectorAll<HTMLElement>('.comment-compose-row')].find(
+  const same = [...document.querySelectorAll<HTMLElement>(".comment-compose-row")].find(
     (r) =>
       r.dataset.filePath === filePath &&
       r.dataset.side === side &&
       Number(r.dataset.startLine) === lo &&
-      Number(r.dataset.endLine) === hi
+      Number(r.dataset.endLine) === hi,
   );
   if (same) {
-    same.querySelector<HTMLTextAreaElement>('.comment-input')?.focus();
+    same.querySelector<HTMLTextAreaElement>(".comment-input")?.focus();
     return;
   }
 
   // Otherwise replace any open line-compose and (re)highlight this range.
-  document.querySelectorAll('.comment-compose-row').forEach((r) => r.remove());
+  document.querySelectorAll(".comment-compose-row").forEach((r) => r.remove());
   const cell = findAnchorCell(filePath, side, hi);
   if (!cell) {
     clearRangeHighlight();
     return;
   }
 
-  const isSplit = isSplitTable(cell.closest('table'));
-  const at = insertionPointAfter(cell.closest('tr')!);
+  const isSplit = isSplitTable(cell.closest("table"));
+  const at = insertionPointAfter(cell.closest("tr")!);
   at.insertAdjacentHTML(
-    'afterend',
-    `<tr class="comment-row comment-compose-row">${threadCells(isSplit, side, composeInner())}</tr>`
+    "afterend",
+    `<tr class="comment-row comment-compose-row">${threadCells(isSplit, side, composeInner())}</tr>`,
   );
   const composeRow = at.nextElementSibling as HTMLElement | null;
-  if (!composeRow) return;
+  if (!composeRow) {
+    return;
+  }
   Object.assign(composeRow.dataset, {
     filePath,
     side,
@@ -262,37 +282,43 @@ function openLineCompose(filePath: string, side: CommentSide, a: number, b: numb
   });
   setFormContext(composeRow);
   highlightRange(filePath, side, lo, hi);
-  composeRow.querySelector<HTMLTextAreaElement>('.comment-input')?.focus();
+  composeRow.querySelector<HTMLTextAreaElement>(".comment-input")?.focus();
 }
 
 function openFileCompose(fileEl: HTMLElement): void {
-  const filePath = fileEl.dataset.path ?? '';
-  const container = fileEl.querySelector('.file-comments');
-  if (!container) return;
-  let compose = container.querySelector<HTMLElement>('.file-comment-compose');
+  const filePath = fileEl.dataset.path ?? "";
+  const container = fileEl.querySelector(".file-comments");
+  if (!container) {
+    return;
+  }
+  let compose = container.querySelector<HTMLElement>(".file-comment-compose");
   if (!compose) {
     container.insertAdjacentHTML(
-      'beforeend',
-      `<div class="file-comment-compose">${composeInner()}</div>`
+      "beforeend",
+      `<div class="file-comment-compose">${composeInner()}</div>`,
     );
-    compose = container.querySelector<HTMLElement>('.file-comment-compose');
-    if (!compose) return;
+    compose = container.querySelector<HTMLElement>(".file-comment-compose");
+    if (!compose) {
+      return;
+    }
     Object.assign(compose.dataset, {
       filePath,
-      side: 'file',
-      startLine: '0',
-      endLine: '0',
-      snapshot: '[]',
+      side: "file",
+      startLine: "0",
+      endLine: "0",
+      snapshot: "[]",
     });
     setFormContext(compose);
   }
-  compose.querySelector<HTMLTextAreaElement>('.comment-input')?.focus();
+  compose.querySelector<HTMLTextAreaElement>(".comment-input")?.focus();
 }
 
 // Copy anchor context onto the form so submit is container-agnostic.
 function setFormContext(container: HTMLElement): void {
-  const form = container.querySelector<HTMLFormElement>('.comment-compose');
-  if (!form) return;
+  const form = container.querySelector<HTMLFormElement>(".comment-compose");
+  if (!form) {
+    return;
+  }
   Object.assign(form.dataset, {
     filePath: container.dataset.filePath,
     side: container.dataset.side,
@@ -303,18 +329,20 @@ function setFormContext(container: HTMLElement): void {
 }
 
 function setButtonsDisabled(form: HTMLFormElement, disabled: boolean): void {
-  form.querySelectorAll('button').forEach((b) => (b.disabled = disabled));
+  form.querySelectorAll("button").forEach((b) => (b.disabled = disabled));
 }
 
 async function submitCompose(form: HTMLFormElement): Promise<void> {
-  const container = form.closest<HTMLElement>('.comment-compose-row, .file-comment-compose');
-  const input = form.querySelector<HTMLTextAreaElement>('.comment-input');
+  const container = form.closest<HTMLElement>(".comment-compose-row, .file-comment-compose");
+  const input = form.querySelector<HTMLTextAreaElement>(".comment-input");
   const body = input?.value.trim();
-  if (!body || !container) return;
+  if (!body || !container) {
+    return;
+  }
   setButtonsDisabled(form, true);
   try {
-    const res = await fetch(withRepoQuery('/api/comments'), {
-      method: 'POST',
+    const res = await fetch(withRepoQuery("/api/comments"), {
+      method: "POST",
       headers: jsonHeaders(),
       body: JSON.stringify({
         filePath: form.dataset.filePath,
@@ -323,15 +351,15 @@ async function submitCompose(form: HTMLFormElement): Promise<void> {
         endLine: Number(form.dataset.endLine),
         body,
         branch,
-        lineSnapshot: JSON.parse(form.dataset.snapshot || '[]') as string[],
+        lineSnapshot: JSON.parse(form.dataset.snapshot || "[]") as string[],
       }),
     });
     const { comment } = (await res.json()) as { comment: UiComment };
-    if (comment.side === 'file') {
+    if (comment.side === "file") {
       container.outerHTML = fileCommentHtml(comment);
     } else {
-      const isSplit = isSplitTable(container.closest('table'));
-      container.insertAdjacentHTML('afterend', commentRowHtml(comment, isSplit));
+      const isSplit = isSplitTable(container.closest("table"));
+      container.insertAdjacentHTML("afterend", commentRowHtml(comment, isSplit));
       container.remove();
     }
     clearRangeHighlight();
@@ -357,10 +385,12 @@ function dropComment(id: string): void {
 
 async function removeComment(card: HTMLElement): Promise<void> {
   const id = card.dataset.commentId;
-  if (!id) return;
+  if (!id) {
+    return;
+  }
   try {
     await fetch(withRepoQuery(`/api/comments/${encodeURIComponent(id)}`), {
-      method: 'DELETE',
+      method: "DELETE",
       headers: clientHeaders(),
     });
     dropComment(id);
@@ -369,10 +399,10 @@ async function removeComment(card: HTMLElement): Promise<void> {
   }
 }
 
-async function setStatus(id: string, status: 'open' | 'resolved'): Promise<void> {
+async function setStatus(id: string, status: "open" | "resolved"): Promise<void> {
   try {
     const res = await fetch(withRepoQuery(`/api/comments/${encodeURIComponent(id)}`), {
-      method: 'PATCH',
+      method: "PATCH",
       headers: jsonHeaders(),
       body: JSON.stringify({ status }),
     });
@@ -386,28 +416,34 @@ async function setStatus(id: string, status: 'open' | 'resolved'): Promise<void>
 // Repaint a root card in place so its pill and Resolve/Reopen label match.
 function applyStatus(c: UiComment): void {
   const card = document.querySelector(`.comment[data-comment-id="${CSS.escape(c.id)}"]`);
-  if (!card) return;
-  const thread = card.closest<HTMLElement>('.comment-thread');
+  if (!card) {
+    return;
+  }
+  const thread = card.closest<HTMLElement>(".comment-thread");
   const isRoot = thread?.dataset.rootId === c.id;
   card.outerHTML = commentCardHtml(c, { isRoot: Boolean(isRoot) });
-  if (isRoot && thread) thread.classList.toggle('is-resolved', c.status === 'resolved');
+  if (isRoot && thread) {
+    thread.classList.toggle("is-resolved", c.status === "resolved");
+  }
 }
 
 async function submitReply(form: HTMLFormElement): Promise<void> {
-  const thread = form.closest<HTMLElement>('.comment-thread');
-  const input = form.querySelector<HTMLTextAreaElement>('.comment-input');
+  const thread = form.closest<HTMLElement>(".comment-thread");
+  const input = form.querySelector<HTMLTextAreaElement>(".comment-input");
   const body = input?.value.trim();
-  if (!body || !thread) return;
+  if (!body || !thread) {
+    return;
+  }
   setButtonsDisabled(form, true);
   try {
-    const res = await fetch(withRepoQuery('/api/comments'), {
-      method: 'POST',
+    const res = await fetch(withRepoQuery("/api/comments"), {
+      method: "POST",
       headers: jsonHeaders(),
       body: JSON.stringify({ parentId: thread.dataset.rootId, body }),
     });
     const { comment } = (await res.json()) as { comment: UiComment };
-    form.closest('.comment-reply-compose')?.remove();
-    thread.insertAdjacentHTML('beforeend', commentCardHtml(comment, { isRoot: false }));
+    form.closest(".comment-reply-compose")?.remove();
+    thread.insertAdjacentHTML("beforeend", commentCardHtml(comment, { isRoot: false }));
   } catch {
     setButtonsDisabled(form, false);
   }
@@ -415,20 +451,24 @@ async function submitReply(form: HTMLFormElement): Promise<void> {
 
 // --- load, export, clear ----------------------------------------------
 function renderComment(c: UiComment, replies?: UiComment[]): void {
-  if (c.side === 'file') {
+  if (c.side === "file") {
     const file = document.querySelector(`.file[data-path="${CSS.escape(c.filePath)}"]`);
     file
-      ?.querySelector('.file-comments')
-      ?.insertAdjacentHTML('beforeend', fileCommentHtml(c, replies));
+      ?.querySelector(".file-comments")
+      ?.insertAdjacentHTML("beforeend", fileCommentHtml(c, replies));
     return;
   }
   // ranges anchor after the end line (GitHub's convention)
   const cell = findAnchorCell(c.filePath, c.side, c.endLine || c.startLine);
-  if (!cell) return; // line not present in the current view/mode
-  const row = cell.closest('tr');
-  if (!row) return;
-  const isSplit = isSplitTable(cell.closest('table'));
-  insertionPointAfter(row).insertAdjacentHTML('afterend', commentRowHtml(c, isSplit, replies));
+  if (!cell) {
+    return;
+  } // line not present in the current view/mode
+  const row = cell.closest("tr");
+  if (!row) {
+    return;
+  }
+  const isSplit = isSplitTable(cell.closest("table"));
+  insertionPointAfter(row).insertAdjacentHTML("afterend", commentRowHtml(c, isSplit, replies));
 }
 
 interface Thread {
@@ -441,8 +481,12 @@ function groupThreads(comments: UiComment[]): Thread[] {
   const roots = comments.filter((c) => !c.parentId);
   const byParent = new Map<string, UiComment[]>();
   for (const c of comments) {
-    if (!c.parentId) continue;
-    if (!byParent.has(c.parentId)) byParent.set(c.parentId, []);
+    if (!c.parentId) {
+      continue;
+    }
+    if (!byParent.has(c.parentId)) {
+      byParent.set(c.parentId, []);
+    }
     byParent.get(c.parentId)!.push(c);
   }
   for (const list of byParent.values()) {
@@ -455,8 +499,10 @@ function groupThreads(comments: UiComment[]): Thread[] {
 }
 
 async function loadComments(): Promise<void> {
-  const loadingEl = document.getElementById('comments-loading');
-  if (loadingEl) loadingEl.hidden = false;
+  const loadingEl = document.getElementById("comments-loading");
+  if (loadingEl) {
+    loadingEl.hidden = false;
+  }
   let comments: UiComment[] = [];
   try {
     const res = await fetch(withRepoQuery(`/api/comments?branch=${encodeURIComponent(branch)}`));
@@ -468,23 +514,27 @@ async function loadComments(): Promise<void> {
   } catch {
     /* leave the page comment-less on failure */
   } finally {
-    if (loadingEl) loadingEl.hidden = true;
+    if (loadingEl) {
+      loadingEl.hidden = true;
+    }
   }
 }
 
 async function runExport(): Promise<void> {
-  if (commentCount === 0 || !exportBtn) return;
+  if (commentCount === 0 || !exportBtn) {
+    return;
+  }
   exportBtn.disabled = true;
-  exportBtn.classList.add('is-busy');
+  exportBtn.classList.add("is-busy");
   try {
-    const res = await fetch(withRepoQuery('/api/export'), {
-      method: 'POST',
+    const res = await fetch(withRepoQuery("/api/export"), {
+      method: "POST",
       headers: jsonHeaders(),
-      body: JSON.stringify({ branch, format: 'md' }),
+      body: JSON.stringify({ branch, format: "md" }),
     });
     const data = (await res.json()) as { count: number; content: string; path: string | null };
     if (!data.count) {
-      toast('No comments to export.');
+      toast("No comments to export.");
       return;
     }
     let copied = false;
@@ -494,33 +544,35 @@ async function runExport(): Promise<void> {
     } catch {
       /* clipboard may be blocked; the file write still succeeded */
     }
-    toast(`Wrote ${data.path}${copied ? ' · copied to clipboard' : ' (clipboard blocked)'}`, {
-      label: 'Clear now',
+    toast(`Wrote ${data.path}${copied ? " · copied to clipboard" : " (clipboard blocked)"}`, {
+      label: "Clear now",
       fn: () => void runClear(),
     });
   } catch {
-    toast('Export failed.');
+    toast("Export failed.");
   } finally {
     exportBtn.disabled = false;
-    exportBtn.classList.remove('is-busy');
+    exportBtn.classList.remove("is-busy");
   }
 }
 
 function removeAllCommentEls(): void {
   document
-    .querySelectorAll('.comment-row, .file-comment, .file-comment-compose')
+    .querySelectorAll(".comment-row, .file-comment, .file-comment-compose")
     .forEach((el) => el.remove());
 }
 
 async function runClear(): Promise<void> {
-  if (commentCount === 0) return;
+  if (commentCount === 0) {
+    return;
+  }
   if (clearBtn) {
     clearBtn.disabled = true;
-    clearBtn.classList.add('is-busy');
+    clearBtn.classList.add("is-busy");
   }
   try {
-    const res = await fetch(withRepoQuery('/api/comments/clear'), {
-      method: 'POST',
+    const res = await fetch(withRepoQuery("/api/comments/clear"), {
+      method: "POST",
       headers: jsonHeaders(),
       body: JSON.stringify({ branch }),
     });
@@ -528,31 +580,33 @@ async function runClear(): Promise<void> {
     removeAllCommentEls();
     commentCount = 0;
     updateButtons();
-    toast(`Cleared ${cleared} comment${cleared === 1 ? '' : 's'}`, {
-      label: 'Undo',
+    toast(`Cleared ${cleared} comment${cleared === 1 ? "" : "s"}`, {
+      label: "Undo",
       fn: () => void undoClear(),
     });
   } catch {
-    toast('Clear failed.');
+    toast("Clear failed.");
   } finally {
     if (clearBtn) {
       clearBtn.disabled = false;
-      clearBtn.classList.remove('is-busy');
+      clearBtn.classList.remove("is-busy");
     }
   }
 }
 
 async function undoClear(): Promise<void> {
   try {
-    const res = await fetch(withRepoQuery('/api/comments/restore'), {
-      method: 'POST',
+    const res = await fetch(withRepoQuery("/api/comments/restore"), {
+      method: "POST",
       headers: clientHeaders(),
     });
     const { restored } = (await res.json()) as { restored: number };
-    if (!restored) return;
+    if (!restored) {
+      return;
+    }
     removeAllCommentEls();
     await loadComments();
-    toast(`Restored ${restored} comment${restored === 1 ? '' : 's'}`);
+    toast(`Restored ${restored} comment${restored === 1 ? "" : "s"}`);
   } catch {
     /* ignore */
   }
@@ -562,38 +616,49 @@ async function undoClear(): Promise<void> {
 // Apply changes made outside this tab (Claude working the review via the
 // API, or a second browser window) without a reload.
 function applyRemote(msg: ServerEvent): void {
-  if (msg.origin === CLIENT_ID) return; // our own change, already applied
-  if (!eventTargetsThisTab(msg)) return;
+  if (msg.origin === CLIENT_ID) {
+    return;
+  } // our own change, already applied
+  if (!eventTargetsThisTab(msg)) {
+    return;
+  }
   switch (msg.type) {
-    case 'comment.created': {
+    case "comment.created": {
       const c = msg.comment;
-      if (c.branch && branch && c.branch !== branch) return;
+      if (c.branch && branch && c.branch !== branch) {
+        return;
+      }
       if (c.parentId) {
         const thread = document.querySelector(
-          `.comment-thread[data-root-id="${CSS.escape(c.parentId)}"]`
+          `.comment-thread[data-root-id="${CSS.escape(c.parentId)}"]`,
         );
         if (!thread || thread.querySelector(`.comment[data-comment-id="${CSS.escape(c.id)}"]`)) {
           return;
         }
-        const compose = thread.querySelector('.comment-reply-compose');
+        const compose = thread.querySelector(".comment-reply-compose");
         const html = commentCardHtml(c, { isRoot: false });
-        if (compose) compose.insertAdjacentHTML('beforebegin', html);
-        else thread.insertAdjacentHTML('beforeend', html);
+        if (compose) {
+          compose.insertAdjacentHTML("beforebegin", html);
+        } else {
+          thread.insertAdjacentHTML("beforeend", html);
+        }
         return;
       }
-      if (document.querySelector(`[data-root-id="${CSS.escape(c.id)}"]`)) return;
+      if (document.querySelector(`[data-root-id="${CSS.escape(c.id)}"]`)) {
+        return;
+      }
       renderComment(c, []);
       commentCount++;
       updateButtons();
       return;
     }
-    case 'comment.updated':
+    case "comment.updated":
       applyStatus(msg.comment);
       return;
-    case 'comment.deleted':
+    case "comment.deleted":
       dropComment(msg.id);
       return;
-    case 'comments.reset':
+    case "comments.reset":
       removeAllCommentEls();
       void loadComments();
       return;
@@ -603,10 +668,12 @@ function applyRemote(msg: ServerEvent): void {
 function connectEvents(): void {
   // ?live=0 opts out — useful when a tool (or a headless browser) needs the
   // page to finish loading rather than hold a stream open.
-  if (new URLSearchParams(location.search).get('live') === '0') return;
-  const es = new EventSource('/api/events');
+  if (new URLSearchParams(location.search).get("live") === "0") {
+    return;
+  }
+  const es = new EventSource("/api/events");
   let seenOpen = false;
-  es.addEventListener('message', (e) => {
+  es.addEventListener("message", (e) => {
     try {
       applyRemote(JSON.parse(e.data as string) as ServerEvent);
     } catch {
@@ -615,7 +682,7 @@ function connectEvents(): void {
   });
   // EventSource reconnects on its own; on reconnect we may have missed
   // events, so resync from the server.
-  es.addEventListener('open', () => {
+  es.addEventListener("open", () => {
     if (seenOpen) {
       removeAllCommentEls();
       void loadComments();
@@ -637,30 +704,36 @@ let dragging = false;
 let suppressClick = false; // set after a drag so the trailing click is ignored
 
 function sideOf(gutter: HTMLElement): CommentSide {
-  return gutter.dataset.side === 'old' ? 'old' : 'new';
+  return gutter.dataset.side === "old" ? "old" : "new";
 }
 
 function attachListeners(): void {
-  if (exportBtn) exportBtn.addEventListener('click', () => void runExport());
-  if (clearBtn) clearBtn.addEventListener('click', () => void runClear());
+  if (exportBtn) {
+    exportBtn.addEventListener("click", () => void runExport());
+  }
+  if (clearBtn) {
+    clearBtn.addEventListener("click", () => void runClear());
+  }
 
-  document.addEventListener('click', (e) => {
-    const add = closestFrom(e.target, '.add-comment');
+  document.addEventListener("click", (e) => {
+    const add = closestFrom(e.target, ".add-comment");
     if (add) {
       e.preventDefault();
       if (suppressClick) {
         suppressClick = false;
         return;
       }
-      const gutter = add.closest<HTMLElement>('.commentable');
-      const filePath = gutter?.closest<HTMLElement>('.file')?.dataset.path;
-      if (!gutter || !filePath) return;
+      const gutter = add.closest<HTMLElement>(".commentable");
+      const filePath = gutter?.closest<HTMLElement>(".file")?.dataset.path;
+      if (!gutter || !filePath) {
+        return;
+      }
       const side = sideOf(gutter);
       const line = Number(gutter.dataset.commentLine);
       // shift-click extends from the line of an already-open compose (same side)
       if (e.shiftKey) {
-        const open = [...document.querySelectorAll<HTMLElement>('.comment-compose-row')].find(
-          (r) => r.dataset.filePath === filePath && r.dataset.side === side
+        const open = [...document.querySelectorAll<HTMLElement>(".comment-compose-row")].find(
+          (r) => r.dataset.filePath === filePath && r.dataset.side === side,
         );
         const anchor = open ? Number(open.dataset.startLine) : line;
         openLineCompose(filePath, side, anchor, line);
@@ -670,109 +743,136 @@ function attachListeners(): void {
       return;
     }
 
-    const fileAdd = closestFrom(e.target, '.add-file-comment');
+    const fileAdd = closestFrom(e.target, ".add-file-comment");
     if (fileAdd) {
       e.preventDefault();
-      const file = fileAdd.closest<HTMLElement>('.file');
-      if (file) openFileCompose(file);
+      const file = fileAdd.closest<HTMLElement>(".file");
+      if (file) {
+        openFileCompose(file);
+      }
       return;
     }
 
-    const cancel = closestFrom(e.target, '.comment-cancel');
+    const cancel = closestFrom(e.target, ".comment-cancel");
     if (cancel) {
       e.preventDefault();
       cancel
-        .closest('.comment-compose-row, .file-comment-compose, .comment-reply-compose')
+        .closest(".comment-compose-row, .file-comment-compose, .comment-reply-compose")
         ?.remove();
       clearRangeHighlight();
       return;
     }
 
-    const reply = closestFrom(e.target, '.comment-reply-btn');
+    const reply = closestFrom(e.target, ".comment-reply-btn");
     if (reply) {
       e.preventDefault();
-      const thread = reply.closest('.comment-thread');
-      if (!thread) return;
-      let compose = thread.querySelector('.comment-reply-compose');
+      const thread = reply.closest(".comment-thread");
+      if (!thread) {
+        return;
+      }
+      let compose = thread.querySelector(".comment-reply-compose");
       if (!compose) {
         thread.insertAdjacentHTML(
-          'beforeend',
-          `<div class="comment-reply-compose">${composeInner()}</div>`
+          "beforeend",
+          `<div class="comment-reply-compose">${composeInner()}</div>`,
         );
-        compose = thread.querySelector('.comment-reply-compose');
+        compose = thread.querySelector(".comment-reply-compose");
       }
-      compose?.querySelector<HTMLTextAreaElement>('.comment-input')?.focus();
+      compose?.querySelector<HTMLTextAreaElement>(".comment-input")?.focus();
       return;
     }
 
-    const resolve = closestFrom(e.target, '.comment-resolve');
+    const resolve = closestFrom(e.target, ".comment-resolve");
     if (resolve) {
       e.preventDefault();
-      const card = resolve.closest<HTMLElement>('.comment');
+      const card = resolve.closest<HTMLElement>(".comment");
       const id = card?.dataset.commentId;
-      if (!id) return;
-      const isResolved = resolve.textContent?.trim() === 'Reopen';
-      void setStatus(id, isResolved ? 'open' : 'resolved');
+      if (!id) {
+        return;
+      }
+      const isResolved = resolve.textContent?.trim() === "Reopen";
+      void setStatus(id, isResolved ? "open" : "resolved");
       return;
     }
 
-    const del = closestFrom(e.target, '.comment-delete');
+    const del = closestFrom(e.target, ".comment-delete");
     if (del) {
       e.preventDefault();
-      const card = del.closest<HTMLElement>('.comment');
-      if (card) void removeComment(card);
+      const card = del.closest<HTMLElement>(".comment");
+      if (card) {
+        void removeComment(card);
+      }
     }
   });
 
   // Drag across the gutter to select a range.
-  document.addEventListener('mousedown', (e) => {
-    if (e.button !== 0) return;
-    const gutter = closestFrom(e.target, '.commentable');
-    const filePath = gutter?.closest<HTMLElement>('.file')?.dataset.path;
-    if (!gutter || !filePath) return;
+  document.addEventListener("mousedown", (e) => {
+    if (e.button !== 0) {
+      return;
+    }
+    const gutter = closestFrom(e.target, ".commentable");
+    const filePath = gutter?.closest<HTMLElement>(".file")?.dataset.path;
+    if (!gutter || !filePath) {
+      return;
+    }
     dragStart = { filePath, side: sideOf(gutter), line: Number(gutter.dataset.commentLine) };
     dragging = false;
   });
 
-  document.addEventListener('mousemove', (e) => {
-    if (!dragStart) return;
-    const row = closestFrom(e.target, 'tr');
+  document.addEventListener("mousemove", (e) => {
+    if (!dragStart) {
+      return;
+    }
+    const row = closestFrom(e.target, "tr");
     const cell = row?.querySelector<HTMLElement>(`.commentable[data-side="${dragStart.side}"]`);
-    if (!cell) return; // no commentable line for this side on this row
+    if (!cell) {
+      return;
+    } // no commentable line for this side on this row
     const line = Number(cell.dataset.commentLine);
-    if (line === dragStart.line && !dragging) return;
+    if (line === dragStart.line && !dragging) {
+      return;
+    }
     dragging = true;
     e.preventDefault(); // suppress text selection while dragging
-    document.body.style.userSelect = 'none';
+    document.body.style.userSelect = "none";
     highlightRange(
       dragStart.filePath,
       dragStart.side,
       Math.min(dragStart.line, line),
-      Math.max(dragStart.line, line)
+      Math.max(dragStart.line, line),
     );
   });
 
-  document.addEventListener('mouseup', (e) => {
-    if (!dragStart) return;
+  document.addEventListener("mouseup", (e) => {
+    if (!dragStart) {
+      return;
+    }
     const ds = dragStart;
     dragStart = null;
-    document.body.style.userSelect = '';
-    if (!dragging) return; // a plain click — the click handler opens a single-line compose
+    document.body.style.userSelect = "";
+    if (!dragging) {
+      return;
+    } // a plain click — the click handler opens a single-line compose
     dragging = false;
     suppressClick = true;
     setTimeout(() => (suppressClick = false), 300); // clear even if no click follows
-    const row = closestFrom(e.target, 'tr');
+    const row = closestFrom(e.target, "tr");
     const cell = row?.querySelector<HTMLElement>(`.commentable[data-side="${ds.side}"]`);
     const endLine = cell ? Number(cell.dataset.commentLine) : ds.line;
     openLineCompose(ds.filePath, ds.side, ds.line, endLine);
   });
 
-  document.addEventListener('submit', (e) => {
-    const form = closestFrom<HTMLFormElement>(e.target, '.comment-compose');
-    if (!form) return;
+  document.addEventListener("submit", (e) => {
+    const form = closestFrom<HTMLFormElement>(e.target, ".comment-compose");
+    if (!form) {
+      return;
+    }
     e.preventDefault();
-    if (form.closest('.comment-reply-compose')) void submitReply(form);
-    else void submitCompose(form);
+    if (form.closest(".comment-reply-compose")) {
+      void submitReply(form);
+    } else {
+      void submitCompose(form);
+    }
   });
 }
 

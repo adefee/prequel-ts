@@ -1,8 +1,8 @@
-import crypto from 'node:crypto';
-import { parsePatch, type StructuredPatch, type StructuredPatchHunk } from 'diff';
+import { parsePatch, type StructuredPatch, type StructuredPatchHunk } from "diff";
+import crypto from "node:crypto";
 
-export type LineType = 'context' | 'add' | 'del';
-export type FileStatus = 'added' | 'modified' | 'removed' | 'renamed' | 'copied';
+export type LineType = "context" | "add" | "del";
+export type FileStatus = "added" | "modified" | "removed" | "renamed" | "copied";
 
 export interface ReviewLine {
   type: LineType;
@@ -41,50 +41,50 @@ export interface ReviewDiff {
 }
 
 const EXT_LANG: Record<string, string> = {
-  ts: 'typescript',
-  tsx: 'tsx',
-  js: 'javascript',
-  jsx: 'jsx',
-  mjs: 'javascript',
-  cjs: 'javascript',
-  json: 'json',
-  json5: 'json5',
-  md: 'markdown',
-  markdown: 'markdown',
-  css: 'css',
-  scss: 'scss',
-  less: 'less',
-  html: 'html',
-  xml: 'xml',
-  yml: 'yaml',
-  yaml: 'yaml',
-  toml: 'toml',
-  ini: 'ini',
-  sh: 'bash',
-  bash: 'bash',
-  zsh: 'bash',
-  py: 'python',
-  rb: 'ruby',
-  go: 'go',
-  rs: 'rust',
-  java: 'java',
-  kt: 'kotlin',
-  c: 'c',
-  h: 'c',
-  cpp: 'cpp',
-  cc: 'cpp',
-  hpp: 'cpp',
-  cs: 'csharp',
-  php: 'php',
-  swift: 'swift',
-  sql: 'sql',
-  graphql: 'graphql',
-  gql: 'graphql',
-  vue: 'vue',
-  svelte: 'svelte',
-  dockerfile: 'docker',
-  proto: 'proto',
-  tf: 'terraform',
+  ts: "typescript",
+  tsx: "tsx",
+  js: "javascript",
+  jsx: "jsx",
+  mjs: "javascript",
+  cjs: "javascript",
+  json: "json",
+  json5: "json5",
+  md: "markdown",
+  markdown: "markdown",
+  css: "css",
+  scss: "scss",
+  less: "less",
+  html: "html",
+  xml: "xml",
+  yml: "yaml",
+  yaml: "yaml",
+  toml: "toml",
+  ini: "ini",
+  sh: "bash",
+  bash: "bash",
+  zsh: "bash",
+  py: "python",
+  rb: "ruby",
+  go: "go",
+  rs: "rust",
+  java: "java",
+  kt: "kotlin",
+  c: "c",
+  h: "c",
+  cpp: "cpp",
+  cc: "cpp",
+  hpp: "cpp",
+  cs: "csharp",
+  php: "php",
+  swift: "swift",
+  sql: "sql",
+  graphql: "graphql",
+  gql: "graphql",
+  vue: "vue",
+  svelte: "svelte",
+  dockerfile: "docker",
+  proto: "proto",
+  tf: "terraform",
 };
 
 export function inferLanguage(filePath: string | null | undefined): string | null {
@@ -92,25 +92,25 @@ export function inferLanguage(filePath: string | null | undefined): string | nul
     return null;
   }
 
-  const base = (filePath.split('/').pop() ?? '').toLowerCase();
-  if (base === 'dockerfile') {
-    return 'docker';
+  const base = (filePath.split("/").pop() ?? "").toLowerCase();
+  if (base === "dockerfile") {
+    return "docker";
   }
 
-  const ext = base.includes('.') ? (base.split('.').pop() ?? '') : '';
+  const ext = base.includes(".") ? (base.split(".").pop() ?? "") : "";
   return EXT_LANG[ext] ?? null;
 }
 
 function fileId(oldPath: string | null, newPath: string | null): string {
   return crypto
-    .createHash('sha1')
-    .update(`${oldPath ?? ''}\0${newPath ?? ''}`)
-    .digest('hex')
+    .createHash("sha1")
+    .update(`${oldPath ?? ""}\0${newPath ?? ""}`)
+    .digest("hex")
     .slice(0, 12);
 }
 
-function gitPath(fileName: string | undefined, prefix: 'a/' | 'b/'): string | null {
-  if (!fileName || fileName === '/dev/null') {
+function gitPath(fileName: string | undefined, prefix: "a/" | "b/"): string | null {
+  if (!fileName || fileName === "/dev/null") {
     return null;
   }
 
@@ -119,26 +119,26 @@ function gitPath(fileName: string | undefined, prefix: 'a/' | 'b/'): string | nu
 
 function paths(file: StructuredPatch): [string | null, string | null] {
   return [
-    file.isCreate ? null : gitPath(file.oldFileName, 'a/'),
-    file.isDelete ? null : gitPath(file.newFileName, 'b/'),
+    file.isCreate ? null : gitPath(file.oldFileName, "a/"),
+    file.isDelete ? null : gitPath(file.newFileName, "b/"),
   ];
 }
 
 function status(file: StructuredPatch): FileStatus {
   if (file.isCopy) {
-    return 'copied';
+    return "copied";
   }
   if (file.isRename) {
-    return 'renamed';
+    return "renamed";
   }
   if (file.isCreate) {
-    return 'added';
+    return "added";
   }
   if (file.isDelete) {
-    return 'removed';
+    return "removed";
   }
 
-  return 'modified';
+  return "modified";
 }
 
 function mapHunk(hunk: StructuredPatchHunk): ReviewHunk {
@@ -147,16 +147,16 @@ function mapHunk(hunk: StructuredPatchHunk): ReviewHunk {
   const lines = hunk.lines.flatMap<ReviewLine>((line) => {
     const operation = line[0];
     const content = line.slice(1);
-    if (operation === '+') {
-      return [{ type: 'add', oldNumber: null, newNumber: newNumber++, content }];
+    if (operation === "+") {
+      return [{ type: "add", oldNumber: null, newNumber: newNumber++, content }];
     }
 
-    if (operation === '-') {
-      return [{ type: 'del', oldNumber: oldNumber++, newNumber: null, content }];
+    if (operation === "-") {
+      return [{ type: "del", oldNumber: oldNumber++, newNumber: null, content }];
     }
 
-    if (operation === ' ') {
-      return [{ type: 'context', oldNumber: oldNumber++, newNumber: newNumber++, content }];
+    if (operation === " ") {
+      return [{ type: "context", oldNumber: oldNumber++, newNumber: newNumber++, content }];
     }
 
     // Git's missing-final-newline marker has no review coordinate.
@@ -165,7 +165,7 @@ function mapHunk(hunk: StructuredPatchHunk): ReviewHunk {
 
   return {
     header: `@@ -${hunk.oldStart},${hunk.oldLines} +${hunk.newStart},${hunk.newLines} @@`,
-    sectionHeading: '',
+    sectionHeading: "",
     oldStart: hunk.oldStart,
     newStart: hunk.newStart,
     oldLines: hunk.oldLines,
@@ -178,9 +178,10 @@ function mapFile(file: StructuredPatch): ReviewFile {
   const [oldPath, newPath] = paths(file);
   const hunks = file.hunks.map(mapHunk);
   const reviewStatus = status(file);
-  const mode = [file.oldMode && `old mode ${file.oldMode}`, file.newMode && `new mode ${file.newMode}`]
-    .filter(Boolean)
-    .join('; ') || null;
+  const mode =
+    [file.oldMode && `old mode ${file.oldMode}`, file.newMode && `new mode ${file.newMode}`]
+      .filter(Boolean)
+      .join("; ") || null;
 
   return {
     id: fileId(oldPath, newPath),
@@ -188,9 +189,9 @@ function mapFile(file: StructuredPatch): ReviewFile {
     newPath,
     status: reviewStatus,
     isBinary: file.isBinary ?? false,
-    language: inferLanguage(reviewStatus === 'removed' ? oldPath : newPath),
-    additions: hunks.flatMap((hunk) => hunk.lines).filter((line) => line.type === 'add').length,
-    deletions: hunks.flatMap((hunk) => hunk.lines).filter((line) => line.type === 'del').length,
+    language: inferLanguage(reviewStatus === "removed" ? oldPath : newPath),
+    additions: hunks.flatMap((hunk) => hunk.lines).filter((line) => line.type === "add").length,
+    deletions: hunks.flatMap((hunk) => hunk.lines).filter((line) => line.type === "del").length,
     mode,
     hunks,
   };

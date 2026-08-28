@@ -1,6 +1,6 @@
-import { diffWordsWithSpace } from 'diff';
-import type { ReviewDiff } from '../git/diff';
-import type { CharRange, RenderDiff, RenderLine } from './renderer';
+import { diffWordsWithSpace } from "diff";
+import type { ReviewDiff } from "../git/diff";
+import type { CharRange, RenderDiff, RenderLine } from "./renderer";
 
 export interface WordDiff {
   oldRanges: CharRange[];
@@ -55,7 +55,7 @@ export function annotateWordDiffs(diff: ReviewDiff): RenderDiff {
           let i = 0;
 
           while (i < lines.length) {
-            if (lines[i]!.type !== 'del' && lines[i]!.type !== 'add') {
+            if (lines[i]!.type !== "del" && lines[i]!.type !== "add") {
               i++;
               continue;
             }
@@ -64,8 +64,8 @@ export function annotateWordDiffs(diff: ReviewDiff): RenderDiff {
             const adds: RenderLine[] = [];
             let j = i;
 
-            while (j < lines.length && (lines[j]!.type === 'del' || lines[j]!.type === 'add')) {
-              (lines[j]!.type === 'del' ? dels : adds).push(lines[j]!);
+            while (j < lines.length && (lines[j]!.type === "del" || lines[j]!.type === "add")) {
+              (lines[j]!.type === "del" ? dels : adds).push(lines[j]!);
               j++;
             }
 
