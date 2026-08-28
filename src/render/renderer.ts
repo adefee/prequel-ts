@@ -1,9 +1,19 @@
 // Renders a diff model into GitHub-"Files changed"-faithful HTML.
 // Supports unified (inline) and split (side-by-side) views.
-// Phase 0: structure + classes only (no syntax highlighting yet — that's Shiki
-// in Phase 1). The DOM/class semantics mirror GitHub so the CSS can match.
 
-function escapeHtml(s) {
+import type {
+  Diff,
+  DiffFile,
+  DiffLine,
+  DiffSummary,
+  FileStatus,
+  Hunk,
+  LineType,
+  Rev,
+  ViewMode,
+} from '../types';
+
+function escapeHtml(s: string | null | undefined): string {
   return String(s)
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
@@ -11,7 +21,7 @@ function escapeHtml(s) {
     .replace(/"/g, '&quot;');
 }
 
-const STATUS_LABEL = {
+const STATUS_LABEL: Record<FileStatus, string> = {
   added: 'added',
   modified: '',
   removed: 'deleted',
@@ -19,7 +29,7 @@ const STATUS_LABEL = {
   copied: 'copied',
 };
 
-function diffStat(file) {
+function diffStat(file: DiffFile): string {
   // GitHub's little green/red squares (max 5) proportional to churn.
   const total = file.additions + file.deletions;
   const blocks = 5;
@@ -43,10 +53,20 @@ function diffStat(file) {
   return `<span class="diffstat" aria-label="${total} changes">${squares}</span>`;
 }
 
+/** Marks a gutter cell as commentable (hover "+" plus the client's anchor data). */
+interface CommentAnchor {
+  side: 'old' | 'new';
+  line: number | null;
+}
+
+/** Context for expandable hunk headers: which file/revision to fetch from. */
+interface RenderContext {
+  path: string | null;
+  rev: Rev | null;
+}
+
 // --- cell builders -------------------------------------------------------
-// `comment` = {side, line} marks the gutter cell as commentable (renders the
-// hover "+" and carries the anchor data the client needs).
-function numCell(number, extraClass, comment) {
+function numCell(number: number | null, extraClass: string, comment?: CommentAnchor): string {
   const numAttr = number == null ? '' : ` data-line-number="${number}"`;
   if (comment) {
     return (
@@ -59,26 +79,27 @@ function numCell(number, extraClass, comment) {
   return `<td class="blob-num ${extraClass}"${numAttr}></td>`;
 }
 
-const MARKER = { context: ' ', add: '+', del: '-' };
+const MARKER: Record<LineType, string> = { context: ' ', add: '+', del: '-' };
 
 // `line.html` is pre-highlighted (Shiki) and already escaped; otherwise escape
 // the raw content here.
-function codeCell(type, line, extraClass) {
-  const cls = extraClass || `blob-code-${type === 'context' ? 'context' : type === 'add' ? 'addition' : 'deletion'}`;
+function codeCell(type: LineType, line: DiffLine, extraClass?: string): string {
+  const cls =
+    extraClass || `blob-code-${type === 'context' ? 'context' : type === 'add' ? 'addition' : 'deletion'}`;
   const inner = line.html != null ? line.html : escapeHtml(line.content);
   return `<td class="blob-code ${cls}"><span class="blob-code-inner"><span class="marker">${MARKER[type]}</span>${inner}</span></td>`;
 }
 
 // An empty side in split view (no corresponding line).
-function emptyNumCell() {
+function emptyNumCell(): string {
   return '<td class="blob-num blob-num-empty"></td>';
 }
-function emptyCodeCell() {
+function emptyCodeCell(): string {
   return '<td class="blob-code blob-code-empty"></td>';
 }
 
 // --- unified (inline) view ----------------------------------------------
-function renderUnifiedLine(line) {
+function renderUnifiedLine(line: DiffLine): string {
   if (line.type === 'context') {
     return (
       '<tr>' +
@@ -115,22 +136,22 @@ const EXPAND_ICON =
 
 // Line numbers reached at the end of a hunk (for computing the gap above the
 // next hunk).
-function hunkNewEnd(hunk) {
+function hunkNewEnd(hunk: Hunk): number {
   for (let i = hunk.lines.length - 1; i >= 0; i--) {
-    if (hunk.lines[i].newNumber != null) return hunk.lines[i].newNumber;
+    const n = hunk.lines[i]!.newNumber;
+    if (n != null) return n;
   }
   return hunk.newStart - 1;
-}
-function hunkOldEnd(hunk) {
-  for (let i = hunk.lines.length - 1; i >= 0; i--) {
-    if (hunk.lines[i].oldNumber != null) return hunk.lines[i].oldNumber;
-  }
-  return hunk.oldStart - 1;
 }
 
 // A hunk-header row. `expandable` puts an expander in the gutter and metadata
 // on the row so the client can fetch the gap above this hunk.
-function hunkHeaderRow(hunk, ctx, prevNewEnd, { split }) {
+function hunkHeaderRow(
+  hunk: Hunk,
+  ctx: RenderContext,
+  prevNewEnd: number,
+  { split }: { split: boolean }
+): string {
   const gapAbove = hunk.newStart - 1 - prevNewEnd; // >0 when there's hidden context
   const expandable = ctx.rev && gapAbove > 0;
   const data = expandable
@@ -146,7 +167,7 @@ function hunkHeaderRow(hunk, ctx, prevNewEnd, { split }) {
   return `<tr class="hunk-header-row"${data}>${gutterCell}${codeCol}</tr>`;
 }
 
-function renderUnifiedTable(file, ctx) {
+function renderUnifiedTable(file: DiffFile, ctx: RenderContext): string {
   let prevNewEnd = 0;
   let rows = '';
   for (const hunk of file.hunks) {
@@ -164,29 +185,27 @@ function renderUnifiedTable(file, ctx) {
 // --- split (side-by-side) view ------------------------------------------
 // GitHub pairs a run of consecutive deletions with the following run of
 // additions row-by-row; leftover del/add lines get an empty cell opposite.
-function renderSplitPair(dels, adds) {
+function renderSplitPair(dels: DiffLine[], adds: DiffLine[]): string {
   let out = '';
   const n = Math.max(dels.length, adds.length);
   for (let i = 0; i < n; i++) {
     const d = dels[i];
     const a = adds[i];
-    let left;
-    let right;
-    if (d)
-      left = numCell(d.oldNumber, 'blob-num-deletion', { side: 'old', line: d.oldNumber }) + codeCell('del', d);
-    else left = emptyNumCell() + emptyCodeCell();
-    if (a)
-      right = numCell(a.newNumber, 'blob-num-addition', { side: 'new', line: a.newNumber }) + codeCell('add', a);
-    else right = emptyNumCell() + emptyCodeCell();
+    const left = d
+      ? numCell(d.oldNumber, 'blob-num-deletion', { side: 'old', line: d.oldNumber }) + codeCell('del', d)
+      : emptyNumCell() + emptyCodeCell();
+    const right = a
+      ? numCell(a.newNumber, 'blob-num-addition', { side: 'new', line: a.newNumber }) + codeCell('add', a)
+      : emptyNumCell() + emptyCodeCell();
     out += `<tr>${left}${right}</tr>`;
   }
   return out;
 }
 
-function renderSplitHunkBody(hunk) {
+function renderSplitHunkBody(hunk: Hunk): string {
   let body = '';
-  let dels = [];
-  let adds = [];
+  let dels: DiffLine[] = [];
+  let adds: DiffLine[] = [];
   const flush = () => {
     if (dels.length || adds.length) {
       body += renderSplitPair(dels, adds);
@@ -216,7 +235,7 @@ function renderSplitHunkBody(hunk) {
   return body;
 }
 
-function renderSplitTable(file, ctx) {
+function renderSplitTable(file: DiffFile, ctx: RenderContext): string {
   let prevNewEnd = 0;
   let rows = '';
   for (const hunk of file.hunks) {
@@ -232,16 +251,16 @@ function renderSplitTable(file, ctx) {
 }
 
 // --- file + document ----------------------------------------------------
-function renderFileBody(file, view, rev) {
+function renderFileBody(file: DiffFile, view: ViewMode, rev: Rev | null): string {
   if (file.isBinary) {
     return '<div class="binary-notice">Binary file not shown.</div>';
   }
-  const ctx = { path: file.newPath, rev };
+  const ctx: RenderContext = { path: file.newPath, rev };
   return view === 'split' ? renderSplitTable(file, ctx) : renderUnifiedTable(file, ctx);
 }
 
-function renderFile(file, view, rev) {
-  const path = escapeHtml(file.newPath);
+function renderFile(file: DiffFile, view: ViewMode, rev: Rev | null): string {
+  const filePath = escapeHtml(file.newPath);
   const renamedFrom =
     file.status === 'renamed' && file.oldPath !== file.newPath
       ? `<span class="file-rename">${escapeHtml(file.oldPath)} → </span>`
@@ -254,7 +273,7 @@ function renderFile(file, view, rev) {
     `<span class="file-deletions">−${file.deletions}</span>`;
 
   return `
-  <div class="file" id="diff-${file.id}" data-path="${path}">
+  <div class="file" id="diff-${file.id}" data-path="${filePath}">
     <div class="file-header" data-file-id="${file.id}">
       <button class="collapse-btn" aria-label="Toggle diff" aria-expanded="true">
         <svg class="chevron" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">
@@ -264,8 +283,8 @@ function renderFile(file, view, rev) {
       ${diffStat(file)}
       ${counts}
       <span class="file-info">
-        ${renamedFrom}<span class="file-path" title="${path}">${path}</span>
-        <button class="copy-path" data-path="${path}" title="Copy path" aria-label="Copy path">
+        ${renamedFrom}<span class="file-path" title="${filePath}">${filePath}</span>
+        <button class="copy-path" data-path="${filePath}" title="Copy path" aria-label="Copy path">
           <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M0 6.75C0 5.784.784 5 1.75 5h1.5a.75.75 0 0 1 0 1.5h-1.5a.25.25 0 0 0-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 0 0 .25-.25v-1.5a.75.75 0 0 1 1.5 0v1.5A1.75 1.75 0 0 1 9.25 16h-7.5A1.75 1.75 0 0 1 0 14.25Z"></path><path d="M5 1.75C5 .784 5.784 0 6.75 0h7.5C15.216 0 16 .784 16 1.75v7.5A1.75 1.75 0 0 1 14.25 11h-7.5A1.75 1.75 0 0 1 5 9.25Zm1.75-.25a.25.25 0 0 0-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 0 0 .25-.25v-7.5a.25.25 0 0 0-.25-.25Z"></path></svg>
         </button>
         ${statusLabel}
@@ -285,15 +304,21 @@ function renderFile(file, view, rev) {
 }
 
 // --- changed-files tree -------------------------------------------------
-function buildTree(files) {
-  const root = { name: '', dirs: new Map(), files: [] };
+interface TreeNode {
+  name: string;
+  dirs: Map<string, TreeNode>;
+  files: Array<{ name: string; file: DiffFile }>;
+}
+
+function buildTree(files: DiffFile[]): TreeNode {
+  const root: TreeNode = { name: '', dirs: new Map(), files: [] };
   for (const f of files) {
-    const parts = (f.newPath || f.oldPath).split('/');
-    const fileName = parts.pop();
+    const parts = (f.newPath || f.oldPath || '').split('/');
+    const fileName = parts.pop() ?? '';
     let node = root;
     for (const part of parts) {
       if (!node.dirs.has(part)) node.dirs.set(part, { name: part, dirs: new Map(), files: [] });
-      node = node.dirs.get(part);
+      node = node.dirs.get(part)!;
     }
     node.files.push({ name: fileName, file: f });
   }
@@ -302,11 +327,11 @@ function buildTree(files) {
 }
 
 // Collapse chains of single-child directories (src → src/pricing), like GitHub.
-function compressTree(node) {
-  const merged = new Map();
+function compressTree(node: TreeNode): void {
+  const merged = new Map<string, TreeNode>();
   for (let dir of node.dirs.values()) {
     while (dir.files.length === 0 && dir.dirs.size === 1) {
-      const child = [...dir.dirs.values()][0];
+      const child = [...dir.dirs.values()][0]!;
       child.name = dir.name + '/' + child.name;
       dir = child;
     }
@@ -323,7 +348,7 @@ const TREE_CHEVRON =
 const CHECK_ICON =
   '<svg viewBox="0 0 16 16" width="12" height="12" aria-hidden="true"><path d="M13.78 4.22a.75.75 0 0 1 0 1.06l-7.25 7.25a.75.75 0 0 1-1.06 0L2.22 9.28a.751.751 0 0 1 .018-1.042.751.751 0 0 1 1.042-.018L6 10.94l6.72-6.72a.75.75 0 0 1 1.06 0Z"></path></svg>';
 
-function renderTreeNode(node, depth) {
+function renderTreeNode(node: TreeNode, depth: number): string {
   let html = '';
   const dirs = [...node.dirs.values()].sort((a, b) => a.name.localeCompare(b.name));
   for (const dir of dirs) {
@@ -353,17 +378,28 @@ function renderTreeNode(node, depth) {
   return html;
 }
 
-export function renderFileTree(diff) {
+export function renderFileTree(diff: Diff): string {
   return renderTreeNode(buildTree(diff.files), 0);
 }
 
-export function renderDiff(diff, { view = 'split', rev = null } = {}) {
-  const totalAdd = diff.files.reduce((a, f) => a + f.additions, 0);
-  const totalDel = diff.files.reduce((a, f) => a + f.deletions, 0);
-  const summary = {
+export interface RenderDiffOptions {
+  view?: ViewMode;
+  rev?: Rev | null;
+}
+
+export interface RenderedDiff {
+  filesHtml: string;
+  summary: DiffSummary;
+}
+
+export function renderDiff(
+  diff: Diff,
+  { view = 'split', rev = null }: RenderDiffOptions = {}
+): RenderedDiff {
+  const summary: DiffSummary = {
     fileCount: diff.files.length,
-    additions: totalAdd,
-    deletions: totalDel,
+    additions: diff.files.reduce((a, f) => a + f.additions, 0),
+    deletions: diff.files.reduce((a, f) => a + f.deletions, 0),
   };
   const filesHtml = diff.files.map((f) => renderFile(f, view, rev)).join('\n');
   return { filesHtml, summary };

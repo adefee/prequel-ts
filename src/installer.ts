@@ -11,13 +11,20 @@ import path from 'node:path';
 import os from 'node:os';
 import { fileURLToPath } from 'node:url';
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
+interface Target {
+  label: string;
+  source: string;
+  dir: string;
+  file: string;
+}
+
+const here = path.dirname(fileURLToPath(import.meta.url));
 // Add an agent by adding a row here: where its artifact lives, and what the
 // source file is.
-const TARGETS = {
+const TARGETS: Record<string, Target> = {
   claude: {
     label: 'Claude Code',
-    source: path.resolve(__dirname, '..', 'skills', 'prequel', 'SKILL.md'),
+    source: path.resolve(here, '..', 'skills', 'prequel', 'SKILL.md'),
     dir: path.join('.claude', 'skills', 'prequel'),
     file: 'SKILL.md',
   },
@@ -25,13 +32,29 @@ const TARGETS = {
 
 export const TARGET_NAMES = Object.keys(TARGETS);
 
-export function targetPath(target, { project = false, cwd = process.cwd() } = {}) {
-  const t = TARGETS[target];
+export interface InstallOptions {
+  project?: boolean;
+  force?: boolean;
+  cwd?: string;
+}
+
+export type InstallStatus = 'installed' | 'updated' | 'current' | 'conflict' | 'unknown-target';
+
+export interface InstallResult {
+  status: InstallStatus;
+  dest: string | null;
+}
+
+export function targetPath(
+  target: string,
+  { project = false, cwd = process.cwd() }: InstallOptions = {}
+): string {
+  const t = TARGETS[target]!;
   const base = project ? cwd : os.homedir();
   return path.join(base, t.dir, t.file);
 }
 
-async function readOrNull(p) {
+async function readOrNull(p: string): Promise<string | null> {
   try {
     return await fs.readFile(p, 'utf8');
   } catch {
@@ -39,11 +62,12 @@ async function readOrNull(p) {
   }
 }
 
-// Returns { status, dest } where status is one of:
-//   installed | updated | current | conflict
 // `conflict` means the file on disk was edited; we refuse to clobber it
 // without --force so local customizations aren't silently lost.
-export async function install(target, { project = false, force = false, cwd = process.cwd() } = {}) {
+export async function install(
+  target: string,
+  { project = false, force = false, cwd = process.cwd() }: InstallOptions = {}
+): Promise<InstallResult> {
   const t = TARGETS[target];
   if (!t) return { status: 'unknown-target', dest: null };
   const source = await fs.readFile(t.source, 'utf8');
@@ -60,8 +84,8 @@ export async function install(target, { project = false, force = false, cwd = pr
 
 // Names of installed integrations that no longer match the shipped copy —
 // used to nudge after an upgrade. Never includes uninstalled targets.
-export async function staleTargets() {
-  const stale = [];
+export async function staleTargets(): Promise<string[]> {
+  const stale: string[] = [];
   for (const [name, t] of Object.entries(TARGETS)) {
     try {
       const existing = await readOrNull(targetPath(name));

@@ -1,10 +1,11 @@
 // Parses raw `git diff` patch text into the diff model consumed by the
-// renderer (same shape as src/sampleDiff.js). Tolerant of the header variants
+// renderer (same shape as src/sampleDiff.ts). Tolerant of the header variants
 // git emits: added/deleted/renamed/copied/binary/mode-only changes.
 
 import crypto from 'node:crypto';
+import type { Diff, DiffFile, Hunk } from '../types';
 
-const EXT_LANG = {
+const EXT_LANG: Record<string, string> = {
   ts: 'typescript', tsx: 'tsx', js: 'javascript', jsx: 'jsx', mjs: 'javascript',
   cjs: 'javascript', json: 'json', json5: 'json5', md: 'markdown', markdown: 'markdown',
   css: 'css', scss: 'scss', less: 'less', html: 'html', xml: 'xml', yml: 'yaml',
@@ -15,50 +16,52 @@ const EXT_LANG = {
   svelte: 'svelte', dockerfile: 'docker', proto: 'proto', tf: 'terraform',
 };
 
-export function inferLanguage(path) {
-  if (!path) return null;
-  const base = path.split('/').pop().toLowerCase();
+export function inferLanguage(filePath: string | null | undefined): string | null {
+  if (!filePath) return null;
+  const base = (filePath.split('/').pop() ?? '').toLowerCase();
   if (base === 'dockerfile') return 'docker';
-  const ext = base.includes('.') ? base.split('.').pop() : '';
-  return EXT_LANG[ext] || null;
+  const ext = base.includes('.') ? (base.split('.').pop() ?? '') : '';
+  return EXT_LANG[ext] ?? null;
 }
 
-function fileId(oldPath, newPath) {
+function fileId(oldPath: string, newPath: string): string {
   return crypto.createHash('sha1').update(`${oldPath}\0${newPath}`).digest('hex').slice(0, 12);
 }
 
-function stripPrefix(p) {
+function stripPrefix(p: string): string | null {
   if (p === '/dev/null') return null;
   // git uses a/ and b/ prefixes; also handle c/ w/ i/ from some diff variants
   return p.replace(/^[abciw]\//, '');
 }
 
-function parseHunkHeader(line) {
+type HunkHeader = Omit<Hunk, 'lines'>;
+
+function parseHunkHeader(line: string): HunkHeader | null {
   // @@ -oldStart,oldLen +newStart,newLen @@ optional section heading
   const m = /^@@+ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@+(.*)$/.exec(line);
   if (!m) return null;
   return {
-    oldStart: parseInt(m[1], 10),
+    oldStart: parseInt(m[1]!, 10),
     oldLines: m[2] == null ? 1 : parseInt(m[2], 10),
-    newStart: parseInt(m[3], 10),
+    newStart: parseInt(m[3]!, 10),
     newLines: m[4] == null ? 1 : parseInt(m[4], 10),
-    sectionHeading: m[5].replace(/^\s/, ''),
+    sectionHeading: (m[5] ?? '').replace(/^\s/, ''),
     header: line,
   };
 }
 
-export function parseDiff(patch) {
+export function parseDiff(patch: string): Diff {
   const lines = patch.split('\n');
-  const files = [];
+  const files: DiffFile[] = [];
   let i = 0;
 
   while (i < lines.length) {
-    if (!lines[i].startsWith('diff --git')) {
+    if (!lines[i]!.startsWith('diff --git')) {
       i++;
       continue;
     }
 
-    const file = {
+    const file: DiffFile = {
       id: '',
       oldPath: null,
       newPath: null,
@@ -72,16 +75,16 @@ export function parseDiff(patch) {
     };
 
     // Fallback paths from the "diff --git a/x b/y" line.
-    const dg = /^diff --git a\/(.*) b\/(.*)$/.exec(lines[i]);
+    const dg = /^diff --git a\/(.*) b\/(.*)$/.exec(lines[i]!);
     if (dg) {
-      file.oldPath = dg[1];
-      file.newPath = dg[2];
+      file.oldPath = dg[1]!;
+      file.newPath = dg[2]!;
     }
     i++;
 
     // --- header block (until first hunk or next file) ---------------------
-    while (i < lines.length && !lines[i].startsWith('@@') && !lines[i].startsWith('diff --git')) {
-      const l = lines[i];
+    while (i < lines.length && !lines[i]!.startsWith('@@') && !lines[i]!.startsWith('diff --git')) {
+      const l = lines[i]!;
       if (l.startsWith('new file mode')) file.status = 'added';
       else if (l.startsWith('deleted file mode')) file.status = 'removed';
       else if (l.startsWith('rename from ')) {
@@ -101,21 +104,19 @@ export function parseDiff(patch) {
       } else if (l.startsWith('Binary files') || l.startsWith('GIT binary patch')) {
         file.isBinary = true;
       } else if (l.startsWith('--- ')) {
-        const p = stripPrefix(l.slice(4).trim());
-        if (p !== undefined) file.oldPath = p;
+        file.oldPath = stripPrefix(l.slice(4).trim());
       } else if (l.startsWith('+++ ')) {
-        const p = stripPrefix(l.slice(4).trim());
-        if (p !== undefined) file.newPath = p;
+        file.newPath = stripPrefix(l.slice(4).trim());
       }
       i++;
     }
 
     // --- hunks ------------------------------------------------------------
-    let currentHunk = null;
+    let currentHunk: Hunk | null = null;
     let oldNo = 0;
     let newNo = 0;
-    while (i < lines.length && !lines[i].startsWith('diff --git')) {
-      const l = lines[i];
+    while (i < lines.length && !lines[i]!.startsWith('diff --git')) {
+      const l = lines[i]!;
       if (l.startsWith('@@')) {
         const h = parseHunkHeader(l);
         if (h) {
@@ -150,18 +151,16 @@ export function parseDiff(patch) {
         currentHunk.lines.push({ type: 'context', oldNumber: oldNo, newNumber: newNo, content });
         oldNo++;
         newNo++;
-      } else if (l === '') {
-        // trailing blank line between file sections — ignore
-      } else {
-        // unknown line inside hunk region; skip defensively
       }
+      // Anything else (including the blank line between file sections) is
+      // skipped defensively.
       i++;
     }
 
     file.oldPath = file.oldPath || file.newPath;
     file.newPath = file.newPath || file.oldPath;
     file.language = inferLanguage(file.status === 'removed' ? file.oldPath : file.newPath);
-    file.id = fileId(file.oldPath, file.newPath);
+    file.id = fileId(file.oldPath ?? '', file.newPath ?? '');
     files.push(file);
   }
 

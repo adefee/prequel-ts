@@ -95,7 +95,14 @@
 
   <div id="toast" class="toast" hidden></div>
 
-  <script src="/static/js/review.js"></script>
-  <script src="/static/js/comments.js"></script>
+  <% if (viteOrigin) { %>
+  <!-- dev: modules come from the Vite server so edits hot-reload -->
+  <script type="module" src="<%= viteOrigin %>/@vite/client"></script>
+  <script type="module" src="<%= viteOrigin %>/client/review.ts"></script>
+  <script type="module" src="<%= viteOrigin %>/client/comments.ts"></script>
+  <% } else { %>
+  <script type="module" src="/static/dist/review.js"></script>
+  <script type="module" src="/static/dist/comments.js"></script>
+  <% } %>
 </body>
 </html>

@@ -1,8 +1,9 @@
-// Phase 0: a hardcoded diff model used to prove the render pipeline + theming
-// before the real git layer lands in Phase 1. Shape matches the model in the
-// implementation plan (§4.4).
+// A hardcoded diff model shown when prequel is pointed at something that isn't
+// a git repo, so the UI still demonstrates the render pipeline and theming.
 
-export const sampleDiff = {
+import type { Diff } from './types';
+
+export const sampleDiff: Diff = {
   base: 'main',
   head: 'feature/pricing-rules',
   files: [
@@ -54,9 +55,9 @@ export const sampleDiff = {
           newStart: 1,
           lines: [
             { type: 'add', oldNumber: null, newNumber: 1, content: 'export const REGION_RATES: Record<string, number> = {' },
-            { type: 'add', oldNumber: null, newNumber: 2, content: "  US: 0.0725," },
-            { type: 'add', oldNumber: null, newNumber: 3, content: "  EU: 0.20," },
-            { type: 'add', oldNumber: null, newNumber: 4, content: "  CA: 0.13," },
+            { type: 'add', oldNumber: null, newNumber: 2, content: '  US: 0.0725,' },
+            { type: 'add', oldNumber: null, newNumber: 3, content: '  EU: 0.20,' },
+            { type: 'add', oldNumber: null, newNumber: 4, content: '  CA: 0.13,' },
             { type: 'add', oldNumber: null, newNumber: 5, content: '};' },
           ],
         },

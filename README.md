@@ -21,8 +21,11 @@ This is almost entirely vibe-coded. I've barely even looked at the code. Having 
 
 ## Install
 
+prequel runs on [Bun](https://bun.sh) — the CLI and server are TypeScript that
+Bun executes directly, so there's no build step to run the app.
+
 ```bash
-npm install -g @mdesjardins/prequel
+bun install -g @mdesjardins/prequel
 ```
 
 Then run it from inside any git repo:
@@ -30,6 +33,10 @@ Then run it from inside any git repo:
 ```bash
 prequel [repoPath] [--base <ref>] [--port <n>] [--no-open]
 ```
+
+One running server can back several browser tabs on different projects: each tab
+carries its own `?repo=<path>`, and the header path is editable (with a dropdown
+of saved projects) to switch a tab without touching the others.
 
 ## Closing the loop with Claude
 
@@ -65,32 +72,57 @@ work queue. You can also resolve or reopen any comment yourself from the thread.
 
 ## Run from source
 
+Dependencies are managed with [pnpm](https://pnpm.io) 11+, which enforces the
+supply-chain settings in `pnpm-workspace.yaml` (minimum release age, store
+integrity, no unapproved lifecycle scripts). Bun is the runtime, not the package
+manager.
+
 ```bash
-npm install
-npm start                 # serves the sample diff, opens the browser
-npm link                  # makes `prequel` global, with live edits
+pnpm install
+pnpm build                # bundle the browser modules into public/dist
+pnpm start                # run the CLI against the current directory
 ```
+
+For development, `pnpm dev` runs both halves: Vite serves `client/*.ts` with hot
+reload, and Bun restarts the server when anything under `src/` or `bin/` changes.
+It listens on a fixed port (4711 by default, `PREQUEL_PORT` to change it) so the
+browser URL and Vite's socket survive restarts. Arguments are forwarded to the
+CLI:
+
+```bash
+pnpm dev                          # review the current directory
+pnpm dev -- ~/code/other-project  # review somewhere else
+pnpm typecheck                    # tsc --noEmit, browser + server configs
+```
+
+`pnpm build` is required before `pnpm start`: outside dev, the page loads the
+bundled modules from `public/dist/`.
 
 URL params (all optional): `?view=split|unified` picks the layout,
 `?diff=working|branch|all` picks which changes to show (default `working`;
-persists), `?base=<ref>` overrides the base branch, `?mode=light|dark` forces a
-color mode (default follows the OS).
+persists), `?repo=<path>` picks the project for that tab, `?base=<ref>` overrides
+the base branch, `?mode=light|dark` forces a color mode (default follows the OS).
 
 ## Layout
 
 ```
-bin/prequel.js             CLI entry (port selection, browser launch, repo resolution)
-src/server.js             Express app + routes (/ and /api/context)
-src/git/gitService.js     git CLI wrapper: refs, diff generation, blob lines
-src/git/diffParser.js     raw patch text -> diff model
-src/render/renderer.js    diff model -> GitHub-faithful HTML (unified + split)
-src/render/highlighter.js Shiki dual-theme syntax highlighting + word-diff overlay
-src/render/wordDiff.js    intra-line (word-level) diff ranges
-src/comments/commentStore.js  per-repo comment persistence (~/.prequel)
-src/export/claudeExport.js    build markdown/JSON export payload
-src/sampleDiff.js         built-in sample diff (fallback outside a repo)
-views/review.ejs          page shell (loads Primer tokens + diff.css)
-public/css/diff.css       GitHub "Files changed" clone
-public/js/review.js       toggles, collapse/expand, copy path, Viewed, hunk expansion
-public/js/comments.js     hover-+, compose, inject threads, delete
+bin/prequel.ts             CLI entry (port selection, browser launch, repo resolution)
+src/server.ts              Bun.serve routes: page, /api/*, SSE, static files
+src/types.ts               shared domain types (diff model, comments, repo scope)
+src/errors.ts              errors that carry an HTTP status
+src/git/gitService.ts      git CLI wrapper: refs, diff generation, blob lines
+src/git/diffParser.ts      raw patch text -> diff model
+src/render/renderer.ts     diff model -> GitHub-faithful HTML (unified + split)
+src/render/highlighter.ts  Shiki dual-theme syntax highlighting + word-diff overlay
+src/render/wordDiff.ts     intra-line (word-level) diff ranges
+src/comments/commentStore.ts   per-repo comment persistence (~/.prequel)
+src/export/claudeExport.ts     build markdown/JSON export payload
+src/sampleDiff.ts          built-in sample diff (fallback outside a repo)
+views/review.ejs           page shell (Primer tokens, diff.css, client modules)
+public/css/diff.css        GitHub "Files changed" clone
+public/dist/               Vite output, served at /static/dist (generated)
+client/review.ts           toggles, collapse/expand, Viewed, hunk expansion, project picker
+client/comments.ts         hover-+, compose, inject threads, delete, live updates
+client/dom.ts              shared DOM/URL helpers
+scripts/dev.ts             runs Vite + `bun --watch` together
 ```

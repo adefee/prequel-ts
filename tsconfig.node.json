@@ -1,0 +1,9 @@
+// Server/CLI only. Drops the DOM libs so browser globals can't be used by
+// accident in code that runs under Bun.
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "lib": ["ESNext"]
+  },
+  "include": ["src", "bin", "scripts"]
+}

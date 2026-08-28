@@ -1,5 +1,6 @@
 node_modules/
 .pnpm-store/
+public/dist/
 *.log
 .DS_Store
 .prequel/

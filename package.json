@@ -15,7 +15,7 @@
     "url": "https://github.com/mdesjardins/prequel/issues"
   },
   "bin": {
-    "prequel": "bin/prequel.js"
+    "prequel": "bin/prequel.ts"
   },
   "files": [
     "bin",
@@ -25,7 +25,8 @@
     "skills"
   ],
   "engines": {
-    "node": ">=18",
+    "bun": ">=1.2.0",
+    "node": "^20.19.0 || >=22.12.0",
     "pnpm": ">=11.0.0 <12.0.0"
   },
   "publishConfig": {
@@ -39,15 +40,22 @@
     "cli"
   ],
   "scripts": {
-    "start": "node bin/prequel.js",
-    "dev": "node bin/prequel.js"
+    "start": "bun bin/prequel.ts",
+    "dev": "bun scripts/dev.ts",
+    "build": "vite build",
+    "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.node.json"
   },
   "dependencies": {
     "@primer/primitives": "^10.5.0",
     "ejs": "^3.1.10",
-    "express": "^4.21.2",
     "marked": "^12.0.2",
     "open": "^10.1.0",
     "shiki": "^1.29.2"
+  },
+  "devDependencies": {
+    "@types/bun": "1.3.14",
+    "@types/ejs": "3.1.5",
+    "typescript": "7.0.2",
+    "vite": "8.2.2"
   }
 }

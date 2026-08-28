@@ -2,22 +2,24 @@
 // like GitHub's darker within-line red/green. Produces character ranges on each
 // line (`line.wordRanges`) that the highlighter wraps in a word-highlight span.
 
+import type { CharRange, Diff, DiffLine } from '../types';
+
 // Split into word tokens, whitespace runs, and individual punctuation chars.
-function tokenize(s) {
-  return s.match(/[\p{L}\p{N}_]+|\s+|[^\p{L}\p{N}_\s]/gu) || [];
+function tokenize(s: string): string[] {
+  return s.match(/[\p{L}\p{N}_]+|\s+|[^\p{L}\p{N}_\s]/gu) ?? [];
 }
 
 // Longest common subsequence of token arrays → matched index pairs.
-function lcsMatches(a, b) {
+function lcsMatches(a: string[], b: string[]): Array<[number, number]> {
   const n = a.length;
   const m = b.length;
   const dp = Array.from({ length: n + 1 }, () => new Int32Array(m + 1));
   for (let i = n - 1; i >= 0; i--) {
     for (let j = m - 1; j >= 0; j--) {
-      dp[i][j] = a[i] === b[j] ? dp[i + 1][j + 1] + 1 : Math.max(dp[i + 1][j], dp[i][j + 1]);
+      dp[i]![j] = a[i] === b[j] ? dp[i + 1]![j + 1]! + 1 : Math.max(dp[i + 1]![j]!, dp[i]![j + 1]!);
     }
   }
-  const matched = [];
+  const matched: Array<[number, number]> = [];
   let i = 0;
   let j = 0;
   while (i < n && j < m) {
@@ -25,7 +27,7 @@ function lcsMatches(a, b) {
       matched.push([i, j]);
       i++;
       j++;
-    } else if (dp[i + 1][j] >= dp[i][j + 1]) {
+    } else if (dp[i + 1]![j]! >= dp[i]![j + 1]!) {
       i++;
     } else {
       j++;
@@ -35,8 +37,8 @@ function lcsMatches(a, b) {
 }
 
 // Merge the char spans of unmatched (changed) tokens into ranges.
-function unmatchedRanges(tokens, matchedIdx) {
-  const ranges = [];
+function unmatchedRanges(tokens: string[], matchedIdx: Set<number>): CharRange[] {
+  const ranges: CharRange[] = [];
   let offset = 0;
   let curStart = -1;
   let curEnd = -1;
@@ -61,14 +63,19 @@ function unmatchedRanges(tokens, matchedIdx) {
   return ranges;
 }
 
-export function computeWordDiff(oldStr, newStr) {
+export interface WordDiff {
+  oldRanges: CharRange[];
+  newRanges: CharRange[];
+}
+
+export function computeWordDiff(oldStr: string, newStr: string): WordDiff {
   const a = tokenize(oldStr);
   const b = tokenize(newStr);
   const matches = lcsMatches(a, b);
 
   // If the lines share little, a full-line replacement reads better without
   // noisy word highlights — skip (GitHub does similar).
-  const commonChars = matches.reduce((sum, [i]) => sum + a[i].length, 0);
+  const commonChars = matches.reduce((sum, [i]) => sum + a[i]!.length, 0);
   const maxLen = Math.max(oldStr.length, newStr.length, 1);
   if (commonChars / maxLen < 0.2) return { oldRanges: [], newRanges: [] };
 
@@ -79,30 +86,31 @@ export function computeWordDiff(oldStr, newStr) {
 }
 
 // Attach `line.wordRanges` to paired deletion/addition lines within each hunk.
-export function annotateWordDiffs(diff) {
+export function annotateWordDiffs(diff: Diff): Diff {
   for (const file of diff.files) {
     if (file.isBinary) continue;
     for (const hunk of file.hunks) {
       const lines = hunk.lines;
       let i = 0;
       while (i < lines.length) {
-        if (lines[i].type !== 'del' && lines[i].type !== 'add') {
+        const type = lines[i]!.type;
+        if (type !== 'del' && type !== 'add') {
           i++;
           continue;
         }
         // Gather a maximal change block, splitting into dels then adds.
-        const dels = [];
-        const adds = [];
+        const dels: DiffLine[] = [];
+        const adds: DiffLine[] = [];
         let j = i;
-        while (j < lines.length && (lines[j].type === 'del' || lines[j].type === 'add')) {
-          (lines[j].type === 'del' ? dels : adds).push(lines[j]);
+        while (j < lines.length && (lines[j]!.type === 'del' || lines[j]!.type === 'add')) {
+          (lines[j]!.type === 'del' ? dels : adds).push(lines[j]!);
           j++;
         }
         const pairs = Math.min(dels.length, adds.length);
         for (let k = 0; k < pairs; k++) {
-          const { oldRanges, newRanges } = computeWordDiff(dels[k].content, adds[k].content);
-          dels[k].wordRanges = oldRanges;
-          adds[k].wordRanges = newRanges;
+          const { oldRanges, newRanges } = computeWordDiff(dels[k]!.content, adds[k]!.content);
+          dels[k]!.wordRanges = oldRanges;
+          adds[k]!.wordRanges = newRanges;
         }
         i = j;
       }

@@ -6,25 +6,26 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import os from 'node:os';
 import crypto from 'node:crypto';
+import type { Comment, CommentInput, CommentPatch } from '../types';
 
 const DIR = path.join(os.homedir(), '.prequel');
 
-function fileFor(repoRoot) {
+function fileFor(repoRoot: string): string {
   const hash = crypto.createHash('sha1').update(repoRoot).digest('hex').slice(0, 16);
   return path.join(DIR, `${hash}.json`);
 }
 
-async function readAll(repoRoot) {
+async function readAll(repoRoot: string): Promise<Comment[]> {
   try {
     const raw = await fs.readFile(fileFor(repoRoot), 'utf8');
-    const data = JSON.parse(raw);
-    return Array.isArray(data.comments) ? data.comments : [];
+    const data = JSON.parse(raw) as { comments?: unknown };
+    return Array.isArray(data.comments) ? (data.comments as Comment[]) : [];
   } catch {
     return [];
   }
 }
 
-async function writeAll(repoRoot, comments) {
+async function writeAll(repoRoot: string, comments: Comment[]): Promise<void> {
   await fs.mkdir(DIR, { recursive: true });
   const dest = fileFor(repoRoot);
   const tmp = `${dest}.${process.pid}.tmp`;
@@ -32,15 +33,15 @@ async function writeAll(repoRoot, comments) {
   await fs.rename(tmp, dest);
 }
 
-export async function listComments(repoRoot, branch) {
+export async function listComments(repoRoot: string, branch?: string | null): Promise<Comment[]> {
   const all = await readAll(repoRoot);
   return branch ? all.filter((c) => c.branch === branch) : all;
 }
 
-export async function addComment(repoRoot, data) {
+export async function addComment(repoRoot: string, data: CommentInput): Promise<Comment> {
   const all = await readAll(repoRoot);
   const now = new Date().toISOString();
-  const comment = {
+  const comment: Comment = {
     id: crypto.randomUUID(),
     repoRoot,
     createdAt: now,
@@ -53,12 +54,16 @@ export async function addComment(repoRoot, data) {
   return comment;
 }
 
-export async function getComment(repoRoot, id) {
+export async function getComment(repoRoot: string, id: string): Promise<Comment | null> {
   const all = await readAll(repoRoot);
-  return all.find((c) => c.id === id) || null;
+  return all.find((c) => c.id === id) ?? null;
 }
 
-export async function updateComment(repoRoot, id, patch) {
+export async function updateComment(
+  repoRoot: string,
+  id: string,
+  patch: CommentPatch
+): Promise<Comment | null> {
   const all = await readAll(repoRoot);
   const comment = all.find((c) => c.id === id);
   if (!comment) return null;
@@ -69,7 +74,7 @@ export async function updateComment(repoRoot, id, patch) {
 
 // Deleting a root comment also deletes its replies — a reply without its
 // comment has nothing to attach to and would be invisible in the UI.
-export async function deleteComment(repoRoot, id) {
+export async function deleteComment(repoRoot: string, id: string): Promise<number | false> {
   const all = await readAll(repoRoot);
   if (!all.some((c) => c.id === id)) return false;
   const kept = all.filter((c) => c.id !== id && c.parentId !== id);
@@ -78,9 +83,9 @@ export async function deleteComment(repoRoot, id) {
 }
 
 // In-memory buffer of the last bulk-clear, so the UI can offer a quick Undo.
-const lastCleared = new Map();
+const lastCleared = new Map<string, Comment[]>();
 
-export async function clearComments(repoRoot, branch) {
+export async function clearComments(repoRoot: string, branch?: string | null): Promise<number> {
   const all = await readAll(repoRoot);
   const cleared = branch ? all.filter((c) => c.branch === branch) : all.slice();
   const kept = branch ? all.filter((c) => c.branch !== branch) : [];
@@ -89,7 +94,7 @@ export async function clearComments(repoRoot, branch) {
   return cleared.length;
 }
 
-export async function restoreCleared(repoRoot) {
+export async function restoreCleared(repoRoot: string): Promise<number> {
   const cleared = lastCleared.get(repoRoot);
   if (!cleared || !cleared.length) return 0;
   const all = await readAll(repoRoot);
