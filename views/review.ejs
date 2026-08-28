@@ -7,12 +7,13 @@
   data-view="<%= view %>"
   data-diff="<%= diffMode %>"
   data-branch="<%= head %>"
+  data-repo="<%= repoPath %>"
   data-comments-enabled="<%= commentsEnabled ? '1' : '0' %>"
 >
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>PR Review — <%= head %></title>
+  <title><%= repoName %> — PR Review</title>
   <!-- GitHub's exact design tokens; both files loaded so auto mode follows the OS -->
   <link rel="stylesheet" href="/vendor/primer/functional/themes/light.css" />
   <link rel="stylesheet" href="/vendor/primer/functional/themes/dark.css" />
@@ -62,7 +63,13 @@
             <a class="seg-btn<%= view === 'split' ? ' is-active' : '' %>"
                href="?view=split" data-param="view" data-value="split">Split</a>
           </span>
-          <span class="repo-path" title="<%= repoPath %>"><%= repoPath %></span>
+          <span class="repo-picker">
+            <button type="button" class="repo-path" title="Click to change project path"><%= repoPath %></button>
+            <button type="button" class="repo-shortcuts-toggle" aria-haspopup="menu" aria-expanded="false" title="Saved projects" aria-label="Saved projects">
+              <svg viewBox="0 0 16 16" width="12" height="12" aria-hidden="true"><path d="M4.427 7.427 7.896 10.9a.25.25 0 0 0 .354 0l3.469-3.473A.25.25 0 0 0 11.542 7H4.604a.25.25 0 0 0-.177.427Z"></path></svg>
+            </button>
+            <div class="repo-shortcuts-menu" role="menu" hidden></div>
+          </span>
         </span>
       </div>
     </div>

@@ -1,0 +1,17 @@
+# Single package. There is no packages: glob because this is not a monorepo.
+
+# --- pnpm settings (pnpm 11+: not read from .npmrc) --------------------------
+# Registry/auth would stay in .npmrc; everything else lives here.
+# This repository has no private registry.
+autoInstallPeers: true
+strictPeerDependencies: false
+saveExact: true
+verifyStoreIntegrity: true
+
+# 6 days.
+minimumReleaseAge: 8620
+minimumReleaseAgeStrict: true
+
+# Lifecycle scripts are denied unless listed.
+# Current dependency tree has no packages with install scripts.
+allowBuilds: {}

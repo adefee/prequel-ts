@@ -5,7 +5,7 @@ import fs from 'node:fs/promises';
 import { renderDiff, renderFileTree } from './render/renderer.js';
 import { highlightDiff, highlightLines } from './render/highlighter.js';
 import { annotateWordDiffs } from './render/wordDiff.js';
-import { getDiff, getBlobLines } from './git/gitService.js';
+import { getDiff, getBlobLines, resolveRepoRoot } from './git/gitService.js';
 import { parseDiff, inferLanguage } from './git/diffParser.js';
 import { sampleDiff } from './sampleDiff.js';
 import {
@@ -19,6 +19,39 @@ import {
 } from './comments/commentStore.js';
 import { buildMarkdown, buildJson } from './export/claudeExport.js';
 import { marked } from 'marked';
+
+// Resolve a user-supplied filesystem path to a repo the server can serve.
+// Returns the git toplevel when the path is inside a repo; otherwise keeps the
+// absolute directory (sample-diff mode). Rejects missing / non-directory paths.
+async function resolveRepoSwitch(input) {
+  if (typeof input !== 'string') {
+    const err = new Error('path required');
+    err.status = 400;
+    throw err;
+  }
+  const trimmed = input.trim();
+  if (!trimmed || trimmed.includes('\0')) {
+    const err = new Error('invalid path');
+    err.status = 400;
+    throw err;
+  }
+  const abs = path.resolve(trimmed);
+  let st;
+  try {
+    st = await fs.stat(abs);
+  } catch {
+    const err = new Error('path not found');
+    err.status = 404;
+    throw err;
+  }
+  if (!st.isDirectory()) {
+    const err = new Error('path is not a directory');
+    err.status = 400;
+    throw err;
+  }
+  const root = await resolveRepoRoot(abs);
+  return { repoRoot: root, displayPath: root || abs };
+}
 
 marked.setOptions({ breaks: true });
 
@@ -52,8 +85,12 @@ const projectRoot = path.resolve(__dirname, '..');
 
 const DIFF_MODES = ['all', 'branch', 'working'];
 
-export function createServer({ repoRoot = null, defaultBase = null } = {}) {
+export function createServer({ repoRoot: defaultRepoRoot = null, defaultBase = null } = {}) {
   const app = express();
+  // CLI-started default when a request omits ?repo= / body.repo / x-prequel-repo.
+  // Each browser tab targets its own path via the URL so multiple projects can
+  // be open at once. Only reachable on 127.0.0.1, but still unauthenticated.
+  const defaultDisplayPath = defaultRepoRoot || process.cwd();
 
   app.set('view engine', 'ejs');
   app.set('views', path.join(projectRoot, 'views'));
@@ -65,6 +102,19 @@ export function createServer({ repoRoot = null, defaultBase = null } = {}) {
     express.static(path.join(projectRoot, 'node_modules/@primer/primitives/dist/css'))
   );
 
+  // Pick the repo for this request. Query wins, then JSON body, then header.
+  async function scopeFromRequest(req) {
+    const raw =
+      (typeof req.query.repo === 'string' && req.query.repo.trim()) ||
+      (typeof req.body?.repo === 'string' && req.body.repo.trim()) ||
+      (req.get('x-prequel-repo') || '').trim() ||
+      null;
+    if (!raw) {
+      return { repoRoot: defaultRepoRoot, displayPath: defaultDisplayPath };
+    }
+    return resolveRepoSwitch(raw);
+  }
+
   app.get('/', async (req, res) => {
     // ?view=split|unified (layout); ?mode=light|dark (color); default auto.
     const view = req.query.view === 'unified' ? 'unified' : 'split';
@@ -74,10 +124,26 @@ export function createServer({ repoRoot = null, defaultBase = null } = {}) {
     const requestedBase =
       (typeof req.query.base === 'string' && req.query.base ? req.query.base : null) || defaultBase;
 
+    let repoRoot = defaultRepoRoot;
+    let displayPath = defaultDisplayPath;
+    let pathError = null;
+    try {
+      const scope = await scopeFromRequest(req);
+      repoRoot = scope.repoRoot;
+      displayPath = scope.displayPath;
+    } catch (err) {
+      pathError = err.message;
+      repoRoot = null;
+      displayPath =
+        typeof req.query.repo === 'string' && req.query.repo.trim()
+          ? req.query.repo.trim()
+          : defaultDisplayPath;
+    }
+
     let diff;
     let head;
     let base;
-    let error = null;
+    let error = pathError;
 
     if (repoRoot) {
       try {
@@ -85,6 +151,7 @@ export function createServer({ repoRoot = null, defaultBase = null } = {}) {
         diff = parseDiff(result.patch);
         head = result.head;
         base = result.base;
+        error = null;
       } catch (err) {
         error = err.message;
       }
@@ -92,7 +159,7 @@ export function createServer({ repoRoot = null, defaultBase = null } = {}) {
 
     if (!diff) {
       // No repo (or git failed): fall back to the built-in sample so the UI
-      // still demonstrates. `error` surfaces any git failure.
+      // still demonstrates. `error` surfaces any git / path failure.
       diff = sampleDiff;
       head = sampleDiff.head;
       base = sampleDiff.base;
@@ -106,7 +173,8 @@ export function createServer({ repoRoot = null, defaultBase = null } = {}) {
     const { filesHtml, summary } = renderDiff(diff, { view, rev });
     const treeHtml = diff.files.length ? renderFileTree(diff) : '';
     res.render('review', {
-      repoPath: repoRoot || process.cwd(),
+      repoPath: displayPath,
+      repoName: path.basename(displayPath) || displayPath,
       isRepo: Boolean(repoRoot),
       base,
       head,
@@ -121,10 +189,27 @@ export function createServer({ repoRoot = null, defaultBase = null } = {}) {
     });
   });
 
+  // Validate a path the UI wants to open (does not change any global state —
+  // the tab then navigates with ?repo= so each tab stays independent).
+  app.post('/api/repo', async (req, res) => {
+    try {
+      const next = await resolveRepoSwitch(req.body?.path);
+      res.json({ ok: true, repoRoot: next.repoRoot, displayPath: next.displayPath, isRepo: Boolean(next.repoRoot) });
+    } catch (err) {
+      res.status(err.status || 500).json({ error: err.message });
+    }
+  });
+
   // On-demand context lines for hunk expansion.
   // ?path=&rev=HEAD|WORKTREE&start=&end= (new-side line numbers, 1-based).
   app.get('/api/context', async (req, res) => {
-    if (!repoRoot) return res.status(400).json({ error: 'no repo' });
+    let scope;
+    try {
+      scope = await scopeFromRequest(req);
+    } catch (err) {
+      return res.status(err.status || 500).json({ error: err.message });
+    }
+    if (!scope.repoRoot) return res.status(400).json({ error: 'no repo' });
     const filePath = String(req.query.path || '');
     const rev = req.query.rev === 'HEAD' ? 'HEAD' : 'WORKTREE';
     const start = parseInt(req.query.start, 10);
@@ -133,7 +218,12 @@ export function createServer({ repoRoot = null, defaultBase = null } = {}) {
       return res.status(400).json({ error: 'bad params' });
     }
     try {
-      const { lines, from, eof } = await getBlobLines(repoRoot, { rev, path: filePath, start, end });
+      const { lines, from, eof } = await getBlobLines(scope.repoRoot, {
+        rev,
+        path: filePath,
+        start,
+        end,
+      });
       const html = await highlightLines(lines, inferLanguage(filePath));
       res.json({ from, eof, lines, html });
     } catch (err) {
@@ -143,13 +233,20 @@ export function createServer({ repoRoot = null, defaultBase = null } = {}) {
 
   // --- live updates (SSE) -------------------------------------------------
   // Every mutation is broadcast so open pages reflect changes made elsewhere —
-  // notably by Claude working the review through the API.
+  // notably by Claude working the review through the API. Clients filter by
+  // displayPath / repoRoot so tabs watching different projects stay isolated.
   const sseClients = new Set();
 
   // `origin` is the client id sent by whoever made the change; that client
   // already applied it locally and skips its own echo.
-  function emit(type, data, req) {
-    const payload = JSON.stringify({ type, origin: req?.get('x-prequel-client') || null, ...data });
+  function emit(type, data, req, scope) {
+    const payload = JSON.stringify({
+      type,
+      origin: req?.get('x-prequel-client') || null,
+      repoRoot: scope?.repoRoot ?? null,
+      displayPath: scope?.displayPath ?? null,
+      ...data,
+    });
     for (const client of sseClients) {
       try {
         client.write(`data: ${payload}\n\n`);
@@ -184,14 +281,20 @@ export function createServer({ repoRoot = null, defaultBase = null } = {}) {
 
   // --- review comments ---------------------------------------------------
   app.get('/api/comments', async (req, res) => {
-    if (!repoRoot) return res.json({ comments: [] });
+    let scope;
+    try {
+      scope = await scopeFromRequest(req);
+    } catch (err) {
+      return res.status(err.status || 500).json({ error: err.message });
+    }
+    if (!scope.repoRoot) return res.json({ comments: [] });
     const branch = req.query.branch ? String(req.query.branch) : null;
     // Optional filters; omit them all to get everything (what the UI wants).
     //   ?status=open|resolved   ?author=user|claude   ?roots=1 (exclude replies)
     const status = ['open', 'resolved'].includes(req.query.status) ? req.query.status : null;
     const author = ['user', 'claude'].includes(req.query.author) ? req.query.author : null;
     const rootsOnly = req.query.roots === '1';
-    let comments = await listComments(repoRoot, branch);
+    let comments = await listComments(scope.repoRoot, branch);
     // Comments predating these fields are treated as open, user-authored roots.
     if (status) comments = comments.filter((c) => (c.status || 'open') === status);
     if (author) comments = comments.filter((c) => (c.author || 'user') === author);
@@ -200,7 +303,14 @@ export function createServer({ repoRoot = null, defaultBase = null } = {}) {
   });
 
   app.post('/api/comments', async (req, res) => {
-    if (!repoRoot) return res.status(400).json({ error: 'no repo' });
+    let scope;
+    try {
+      scope = await scopeFromRequest(req);
+    } catch (err) {
+      return res.status(err.status || 500).json({ error: err.message });
+    }
+    if (!scope.repoRoot) return res.status(400).json({ error: 'no repo' });
+    const repoRoot = scope.repoRoot;
     const b = req.body || {};
     const author = b.author === 'claude' ? 'claude' : 'user';
 
@@ -222,7 +332,7 @@ export function createServer({ repoRoot = null, defaultBase = null } = {}) {
         branch: parent.branch ?? null,
         lineSnapshot: [],
       });
-      emit('comment.created', { comment: withHtml(reply) }, req);
+      emit('comment.created', { comment: withHtml(reply) }, req, scope);
       return res.json({ comment: withHtml(reply) });
     }
 
@@ -243,49 +353,80 @@ export function createServer({ repoRoot = null, defaultBase = null } = {}) {
       author,
       parentId: null,
     });
-    emit('comment.created', { comment: withHtml(comment) }, req);
+    emit('comment.created', { comment: withHtml(comment) }, req, scope);
     res.json({ comment: withHtml(comment) });
   });
 
   app.patch('/api/comments/:id', async (req, res) => {
-    if (!repoRoot) return res.status(400).json({ error: 'no repo' });
+    let scope;
+    try {
+      scope = await scopeFromRequest(req);
+    } catch (err) {
+      return res.status(err.status || 500).json({ error: err.message });
+    }
+    if (!scope.repoRoot) return res.status(400).json({ error: 'no repo' });
     const b = req.body || {};
     const patch = {};
     if (typeof b.body === 'string') patch.body = b.body;
     if (b.status === 'open' || b.status === 'resolved') patch.status = b.status;
-    const comment = await updateComment(repoRoot, req.params.id, patch);
+    const comment = await updateComment(scope.repoRoot, req.params.id, patch);
     if (!comment) return res.status(404).json({ error: 'not found' });
-    emit('comment.updated', { comment: withHtml(comment) }, req);
+    emit('comment.updated', { comment: withHtml(comment) }, req, scope);
     res.json({ comment: withHtml(comment) });
   });
 
   app.delete('/api/comments/:id', async (req, res) => {
-    if (!repoRoot) return res.status(400).json({ error: 'no repo' });
-    const removed = await deleteComment(repoRoot, req.params.id);
-    if (removed) emit('comment.deleted', { id: req.params.id }, req);
+    let scope;
+    try {
+      scope = await scopeFromRequest(req);
+    } catch (err) {
+      return res.status(err.status || 500).json({ error: err.message });
+    }
+    if (!scope.repoRoot) return res.status(400).json({ error: 'no repo' });
+    const removed = await deleteComment(scope.repoRoot, req.params.id);
+    if (removed) emit('comment.deleted', { id: req.params.id }, req, scope);
     res.json({ ok: Boolean(removed), removed });
   });
 
   // Bulk clear (with undo) for a clean slate between review rounds.
   app.post('/api/comments/clear', async (req, res) => {
-    if (!repoRoot) return res.status(400).json({ error: 'no repo' });
+    let scope;
+    try {
+      scope = await scopeFromRequest(req);
+    } catch (err) {
+      return res.status(err.status || 500).json({ error: err.message });
+    }
+    if (!scope.repoRoot) return res.status(400).json({ error: 'no repo' });
     const branch = req.body?.branch ? String(req.body.branch) : null;
-    const cleared = await clearComments(repoRoot, branch);
-    emit('comments.reset', {}, req);
+    const cleared = await clearComments(scope.repoRoot, branch);
+    emit('comments.reset', {}, req, scope);
     res.json({ cleared });
   });
 
   app.post('/api/comments/restore', async (req, res) => {
-    if (!repoRoot) return res.status(400).json({ error: 'no repo' });
-    const restored = await restoreCleared(repoRoot);
-    emit('comments.reset', {}, req);
+    let scope;
+    try {
+      scope = await scopeFromRequest(req);
+    } catch (err) {
+      return res.status(err.status || 500).json({ error: err.message });
+    }
+    if (!scope.repoRoot) return res.status(400).json({ error: 'no repo' });
+    const restored = await restoreCleared(scope.repoRoot);
+    emit('comments.reset', {}, req, scope);
     res.json({ restored });
   });
 
   // Build the Claude payload, write it to <repo>/.prequel/, and return it so the
   // client can also copy it to the clipboard.
   app.post('/api/export', async (req, res) => {
-    if (!repoRoot) return res.status(400).json({ error: 'no repo' });
+    let scope;
+    try {
+      scope = await scopeFromRequest(req);
+    } catch (err) {
+      return res.status(err.status || 500).json({ error: err.message });
+    }
+    if (!scope.repoRoot) return res.status(400).json({ error: 'no repo' });
+    const repoRoot = scope.repoRoot;
     const branch = req.body?.branch ? String(req.body.branch) : null;
     const format = req.body?.format === 'json' ? 'json' : 'md';
     // Replies (and anything Claude wrote) are conversation, not asks — the
@@ -310,9 +451,29 @@ export function createServer({ repoRoot = null, defaultBase = null } = {}) {
     res.json({ count: comments.length, content, path: path.join('.prequel', filename) });
   });
 
-  // Identifies this server and the repo it serves, so a client scanning ports
-  // can find the instance belonging to the repo it cares about.
-  app.get('/healthz', (req, res) => res.json({ ok: true, app: 'prequel', repoRoot }));
+  // Identifies this server. Pass ?repo=<path> to confirm it can serve that path
+  // (needed when one process backs multiple browser tabs / projects).
+  app.get('/healthz', async (req, res) => {
+    if (typeof req.query.repo === 'string' && req.query.repo.trim()) {
+      try {
+        const scope = await resolveRepoSwitch(req.query.repo);
+        return res.json({
+          ok: true,
+          app: 'prequel',
+          repoRoot: scope.repoRoot,
+          displayPath: scope.displayPath,
+        });
+      } catch (err) {
+        return res.status(err.status || 500).json({ ok: false, app: 'prequel', error: err.message });
+      }
+    }
+    res.json({
+      ok: true,
+      app: 'prequel',
+      repoRoot: defaultRepoRoot,
+      displayPath: defaultDisplayPath,
+    });
+  });
 
   return app;
 }

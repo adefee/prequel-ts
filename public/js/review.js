@@ -7,12 +7,46 @@
 // URL doesn't pin it.
 const PERSIST_PARAMS = ['view', 'diff'];
 
-// Navigate, setting `param=value` and preserving all other query params.
+// Navigate, setting `param=value` and preserving all other query params
+// (including per-tab `repo`).
 function goToParam(param, value) {
   if (PERSIST_PARAMS.includes(param)) localStorage.setItem('prequel:' + param, value);
   const params = new URLSearchParams(location.search);
   params.set(param, value);
   location.search = params.toString();
+}
+
+function currentRepoPath() {
+  return document.documentElement.dataset.repo || '';
+}
+
+// Append/override the per-tab `repo` query param on an API URL.
+function withRepoQuery(url) {
+  const repo = currentRepoPath();
+  if (!repo) return url;
+  const u = new URL(url, location.origin);
+  u.searchParams.set('repo', repo);
+  return u.pathname + u.search;
+}
+
+// Validate `path` then navigate this tab to it via ?repo= (other tabs untouched).
+async function navigateToRepo(path, { saveShortcut = false } = {}) {
+  const res = await fetch('/api/repo', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ path }),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    const err = new Error(data.error || 'Could not change path');
+    err.status = res.status;
+    throw err;
+  }
+  if (saveShortcut) addShortcut(data.displayPath);
+  const params = new URLSearchParams(location.search);
+  params.set('repo', data.displayPath);
+  location.search = params.toString();
+  return data;
 }
 
 // On load, honor saved preferences for params not pinned in the URL.
@@ -27,6 +61,13 @@ function goToParam(param, value) {
       params.set(param, saved);
       changed = true;
     }
+  }
+  // Pin this tab's project into the URL so duplicate tabs / bookmarks stay
+  // independent of the CLI default and of other open tabs.
+  const repo = currentRepoPath();
+  if (repo && !params.has('repo')) {
+    params.set('repo', repo);
+    changed = true;
   }
   if (changed) location.replace(location.pathname + '?' + params.toString());
 })();
@@ -78,8 +119,10 @@ async function expandContext(btn) {
   row.dataset.loading = '1';
   try {
     const res = await fetch(
-      `/api/context?path=${encodeURIComponent(path)}&rev=${rev}` +
-        `&start=${gapStartNew}&end=${gapEndNew}`
+      withRepoQuery(
+        `/api/context?path=${encodeURIComponent(path)}&rev=${rev}` +
+          `&start=${gapStartNew}&end=${gapEndNew}`
+      )
     );
     const data = await res.json();
     const lines = data.lines || [];
@@ -260,6 +303,235 @@ function flash(el) {
   el.classList.add('copied');
   setTimeout(() => el.classList.remove('copied'), 800);
 }
+
+// --- saved project shortcuts (localStorage) -----------------------------
+const SHORTCUTS_KEY = 'prequel:shortcuts';
+
+function loadShortcuts() {
+  try {
+    const raw = JSON.parse(localStorage.getItem(SHORTCUTS_KEY) || '[]');
+    return Array.isArray(raw) ? raw.filter((p) => typeof p === 'string' && p.trim()) : [];
+  } catch {
+    return [];
+  }
+}
+
+function saveShortcuts(list) {
+  localStorage.setItem(SHORTCUTS_KEY, JSON.stringify(list));
+}
+
+function addShortcut(path) {
+  const next = path.trim();
+  if (!next) return;
+  const list = loadShortcuts().filter((p) => p !== next);
+  list.unshift(next);
+  saveShortcuts(list.slice(0, 30));
+}
+
+function removeShortcut(path) {
+  saveShortcuts(loadShortcuts().filter((p) => p !== path));
+}
+
+// Click the header path → inline input → Enter switches *this tab's* repo.
+(function initRepoPathEditor() {
+  const btn = document.querySelector('.repo-path');
+  if (!btn) return;
+  let editing = false;
+
+  function showError(input, message) {
+    input.classList.add('is-error');
+    input.title = message || 'Could not change path';
+  }
+
+  function startEdit(initialValue) {
+    if (editing) return;
+    editing = true;
+    const current = btn.textContent;
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.className = 'repo-path-input';
+    input.value = initialValue != null ? initialValue : current;
+    input.setAttribute('aria-label', 'Project path');
+    input.spellcheck = false;
+    btn.replaceWith(input);
+    input.focus();
+    input.select();
+
+    const cancel = () => {
+      if (!editing) return;
+      editing = false;
+      input.replaceWith(btn);
+      syncSubnavHeight();
+    };
+
+    const submit = async () => {
+      const next = input.value.trim();
+      if (!next || next === current) {
+        cancel();
+        return;
+      }
+      input.disabled = true;
+      input.classList.remove('is-error');
+      input.title = '';
+      try {
+        await navigateToRepo(next);
+      } catch (err) {
+        input.disabled = false;
+        showError(input, err.message || 'Could not change path');
+        input.focus();
+      }
+    };
+
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        submit();
+      } else if (e.key === 'Escape') {
+        e.preventDefault();
+        cancel();
+      }
+    });
+    input.addEventListener('blur', () => {
+      setTimeout(() => {
+        if (editing && !input.disabled) cancel();
+      }, 0);
+    });
+    syncSubnavHeight();
+  }
+
+  btn.addEventListener('click', () => startEdit());
+  // Expose so the shortcuts menu can open the editor for "Add path…".
+  btn._startEdit = startEdit;
+})();
+
+(function initRepoShortcuts() {
+  const picker = document.querySelector('.repo-picker');
+  const toggle = document.querySelector('.repo-shortcuts-toggle');
+  const menu = document.querySelector('.repo-shortcuts-menu');
+  const pathBtn = document.querySelector('.repo-path');
+  if (!picker || !toggle || !menu || !pathBtn) return;
+
+  function closeMenu() {
+    menu.hidden = true;
+    toggle.setAttribute('aria-expanded', 'false');
+  }
+
+  function openMenu() {
+    renderMenu();
+    menu.hidden = false;
+    toggle.setAttribute('aria-expanded', 'true');
+  }
+
+  function renderMenu() {
+    const current = currentRepoPath();
+    const shortcuts = loadShortcuts();
+    menu.textContent = '';
+
+    if (!shortcuts.length) {
+      const empty = document.createElement('div');
+      empty.className = 'repo-shortcut-empty';
+      empty.textContent = 'No saved projects yet';
+      menu.appendChild(empty);
+    } else {
+      for (const path of shortcuts) {
+        const row = document.createElement('div');
+        row.className = 'repo-shortcut-item' + (path === current ? ' is-current' : '');
+        row.setAttribute('role', 'menuitem');
+
+        const label = document.createElement('button');
+        label.type = 'button';
+        label.className = 'repo-shortcut-label';
+        label.textContent = path;
+        label.title = path;
+        label.addEventListener('click', async () => {
+          closeMenu();
+          if (path === current) return;
+          try {
+            await navigateToRepo(path);
+          } catch (err) {
+            window.alert(err.message || 'Could not open path');
+          }
+        });
+
+        const remove = document.createElement('button');
+        remove.type = 'button';
+        remove.className = 'repo-shortcut-remove';
+        remove.title = 'Remove shortcut';
+        remove.setAttribute('aria-label', 'Remove shortcut');
+        remove.textContent = '×';
+        remove.addEventListener('click', (e) => {
+          e.stopPropagation();
+          removeShortcut(path);
+          renderMenu();
+        });
+
+        row.appendChild(label);
+        row.appendChild(remove);
+        menu.appendChild(row);
+      }
+    }
+
+    const sep = document.createElement('div');
+    sep.className = 'repo-shortcut-sep';
+    sep.textContent = 'Actions';
+    menu.appendChild(sep);
+
+    const saveCurrent = document.createElement('button');
+    saveCurrent.type = 'button';
+    saveCurrent.className = 'repo-shortcut-action';
+    saveCurrent.setAttribute('role', 'menuitem');
+    const already = shortcuts.includes(current);
+    saveCurrent.textContent = already ? 'Current path already saved' : 'Save current path';
+    saveCurrent.disabled = already || !current;
+    saveCurrent.addEventListener('click', () => {
+      addShortcut(current);
+      renderMenu();
+    });
+    menu.appendChild(saveCurrent);
+
+    const addPath = document.createElement('button');
+    addPath.type = 'button';
+    addPath.className = 'repo-shortcut-action';
+    addPath.setAttribute('role', 'menuitem');
+    addPath.textContent = 'Add path…';
+    addPath.addEventListener('click', () => {
+      closeMenu();
+      if (typeof pathBtn._startEdit === 'function') pathBtn._startEdit('');
+      else pathBtn.click();
+    });
+    menu.appendChild(addPath);
+
+    const saveAndOpen = document.createElement('button');
+    saveAndOpen.type = 'button';
+    saveAndOpen.className = 'repo-shortcut-action';
+    saveAndOpen.setAttribute('role', 'menuitem');
+    saveAndOpen.textContent = 'Add path and save…';
+    saveAndOpen.addEventListener('click', () => {
+      closeMenu();
+      // Reuse the inline editor; on success navigateToRepo isn't called with
+      // saveShortcut from the editor — wrap via a one-shot prompt flow:
+      const next = window.prompt('Project path to open and save:', current || '');
+      if (next == null) return;
+      navigateToRepo(next.trim(), { saveShortcut: true }).catch((err) => {
+        window.alert(err.message || 'Could not open path');
+      });
+    });
+    menu.appendChild(saveAndOpen);
+  }
+
+  toggle.addEventListener('click', (e) => {
+    e.stopPropagation();
+    if (menu.hidden) openMenu();
+    else closeMenu();
+  });
+
+  document.addEventListener('click', (e) => {
+    if (!menu.hidden && !picker.contains(e.target)) closeMenu();
+  });
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && !menu.hidden) closeMenu();
+  });
+})();
 
 // "Viewed" checkboxes persist per file id in localStorage and collapse the file.
 const VIEWED_KEY = 'prequel:viewed';

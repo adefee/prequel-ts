@@ -12,27 +12,36 @@ the browser.
 
 ## 1. Find the server
 
-prequel listens on the first free port from 4711 up. Find the instance serving
-*this* repo by scanning and matching the repo root:
+prequel listens on the first free port from 4711 up. One process can serve many
+projects (each browser tab targets a path via `?repo=`). Find a running instance
+that can serve *this* repo:
 
 ```bash
 ROOT=$(git rev-parse --show-toplevel)
 for p in $(seq 4711 4720); do
-  if curl -sf --max-time 1 "http://localhost:$p/healthz" | grep -qF "\"repoRoot\":\"$ROOT\""; then
+  if curl -sf --max-time 1 -G "http://localhost:$p/healthz" --data-urlencode "repo=$ROOT" \
+    | grep -qF "\"repoRoot\":\"$ROOT\""; then
     echo "PREQUEL_PORT=$p"; break
   fi
 done
 ```
 
-If no port matches, prequel is not running for this repo. Tell the user to start it
-(`prequel` from inside the repo) and stop — do not guess a port, and do not fall
-back to reading `~/.prequel/*.json` directly, since writes there won't reach the
-open page.
+If no port matches, prequel is not running (or cannot see this path). Tell the user
+to start it (`prequel` from inside the repo, or open the path in the UI) and stop —
+do not guess a port, and do not fall back to reading `~/.prequel/*.json` directly,
+since writes there won't reach the open page.
+
+Every API call below must include the repo, e.g. `--data-urlencode "repo=$ROOT"` on
+GET, or `"repo":"$ROOT"` in JSON bodies / `?repo=` on the URL (URL-encode the path).
 
 ## 2. Fetch the open comments
 
 ```bash
-curl -s "http://localhost:$PORT/api/comments?status=open&author=user&roots=1"
+curl -s -G "http://localhost:$PORT/api/comments" \
+  --data-urlencode "repo=$ROOT" \
+  --data-urlencode "status=open" \
+  --data-urlencode "author=user" \
+  --data-urlencode "roots=1"
 ```
 
 All three filters matter: `author=user` and `roots=1` keep your own replies out of
@@ -65,7 +74,7 @@ For each comment, in file order: read the surrounding code, make the change, the
 immediately mark it resolved:
 
 ```bash
-curl -s -X PATCH "http://localhost:$PORT/api/comments/$ID" \
+curl -s -X PATCH "http://localhost:$PORT/api/comments/$ID?repo=$(printf %s "$ROOT" | jq -sRr @uri)" \
   -H 'content-type: application/json' -d '{"status":"resolved"}'
 ```
 
@@ -82,7 +91,7 @@ You can post a reply into a comment's thread. A reply needs only the parent id a
 a body — it inherits the file and line from the comment it answers:
 
 ```bash
-curl -s -X POST "http://localhost:$PORT/api/comments" \
+curl -s -X POST "http://localhost:$PORT/api/comments?repo=$(printf %s "$ROOT" | jq -sRr @uri)" \
   -H 'content-type: application/json' \
   -d '{"parentId":"'"$ID"'","author":"claude","body":"Renamed to `parseHunk`; the old name shadowed the import."}'
 ```

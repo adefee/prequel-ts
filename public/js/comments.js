@@ -6,6 +6,7 @@
   const root = document.documentElement;
   if (root.dataset.commentsEnabled !== '1') return;
   const branch = root.dataset.branch || '';
+  const pageRepo = root.dataset.repo || '';
 
   const exportBtn = document.getElementById('export-btn');
   const clearBtn = document.getElementById('clear-btn');
@@ -19,6 +20,19 @@
     (window.crypto && crypto.randomUUID && crypto.randomUUID()) || String(Math.random());
   const jsonHeaders = () => ({ 'content-type': 'application/json', 'x-prequel-client': CLIENT_ID });
   const clientHeaders = () => ({ 'x-prequel-client': CLIENT_ID });
+
+  // Keep API calls scoped to this tab's project (see ?repo= on the page URL).
+  function withRepoQuery(url) {
+    if (!pageRepo) return url;
+    const u = new URL(url, location.origin);
+    u.searchParams.set('repo', pageRepo);
+    return u.pathname + u.search;
+  }
+
+  function eventTargetsThisTab(msg) {
+    if (!msg.repoRoot && !msg.displayPath) return true;
+    return msg.displayPath === pageRepo || msg.repoRoot === pageRepo;
+  }
 
   function escapeHtml(s) {
     return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
@@ -259,7 +273,7 @@
     if (!body) return;
     form.querySelectorAll('button').forEach((b) => (b.disabled = true));
     try {
-      const res = await fetch('/api/comments', {
+      const res = await fetch(withRepoQuery('/api/comments'), {
         method: 'POST',
         headers: jsonHeaders(),
         body: JSON.stringify({
@@ -305,7 +319,7 @@
   async function removeComment(card) {
     const id = card.dataset.commentId;
     try {
-      await fetch(`/api/comments/${id}`, { method: 'DELETE', headers: clientHeaders() });
+      await fetch(withRepoQuery(`/api/comments/${id}`), { method: 'DELETE', headers: clientHeaders() });
       dropComment(id);
     } catch {
       /* leave it in place on failure */
@@ -314,7 +328,7 @@
 
   async function setStatus(id, status) {
     try {
-      const res = await fetch(`/api/comments/${id}`, {
+      const res = await fetch(withRepoQuery(`/api/comments/${id}`), {
         method: 'PATCH',
         headers: jsonHeaders(),
         body: JSON.stringify({ status }),
@@ -342,7 +356,7 @@
     if (!body || !thread) return;
     form.querySelectorAll('button').forEach((b) => (b.disabled = true));
     try {
-      const res = await fetch('/api/comments', {
+      const res = await fetch(withRepoQuery('/api/comments'), {
         method: 'POST',
         headers: jsonHeaders(),
         body: JSON.stringify({ parentId: thread.dataset.rootId, body }),
@@ -389,7 +403,7 @@
   async function loadComments() {
     let comments = [];
     try {
-      const res = await fetch(`/api/comments?branch=${encodeURIComponent(branch)}`);
+      const res = await fetch(withRepoQuery(`/api/comments?branch=${encodeURIComponent(branch)}`));
       ({ comments } = await res.json());
     } catch {
       return;
@@ -404,7 +418,7 @@
     if (commentCount === 0) return;
     exportBtn.disabled = true;
     try {
-      const res = await fetch('/api/export', {
+      const res = await fetch(withRepoQuery('/api/export'), {
         method: 'POST',
         headers: jsonHeaders(),
         body: JSON.stringify({ branch, format: 'md' }),
@@ -439,7 +453,7 @@
     if (commentCount === 0) return;
     if (clearBtn) clearBtn.disabled = true;
     try {
-      const res = await fetch('/api/comments/clear', {
+      const res = await fetch(withRepoQuery('/api/comments/clear'), {
         method: 'POST',
         headers: jsonHeaders(),
         body: JSON.stringify({ branch }),
@@ -456,7 +470,7 @@
 
   async function undoClear() {
     try {
-      const res = await fetch('/api/comments/restore', { method: 'POST', headers: clientHeaders() });
+      const res = await fetch(withRepoQuery('/api/comments/restore'), { method: 'POST', headers: clientHeaders() });
       const { restored } = await res.json();
       if (!restored) return;
       removeAllCommentEls();
@@ -595,6 +609,7 @@
   // API, or a second browser window) without a reload.
   function applyRemote(msg) {
     if (msg.origin === CLIENT_ID) return; // our own change, already applied
+    if (!eventTargetsThisTab(msg)) return;
     switch (msg.type) {
       case 'comment.created': {
         const c = msg.comment;

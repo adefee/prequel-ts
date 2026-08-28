@@ -103,13 +103,177 @@ body {
   min-width: 0;
 }
 
+.repo-picker {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  min-width: 0;
+  max-width: 40vw;
+}
+
 .repo-path {
   font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas,
     "Liberation Mono", monospace;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  min-width: 0;
+  margin: 0;
+  padding: 2px 6px;
+  border: 1px solid transparent;
+  border-radius: 6px 0 0 6px;
+  background: transparent;
+  color: inherit;
+  font-size: inherit;
+  line-height: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.repo-path:hover {
+  background-color: var(--bgColor-muted, #f6f8fa);
+  border-color: var(--borderColor-default, #d1d9e0);
+}
+
+.repo-shortcuts-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 22px;
+  height: 24px;
+  margin: 0;
+  padding: 0;
+  border: 1px solid transparent;
+  border-left: none;
+  border-radius: 0 6px 6px 0;
+  background: transparent;
+  color: var(--fgColor-muted, #59636e);
+  cursor: pointer;
+}
+
+.repo-shortcuts-toggle:hover,
+.repo-shortcuts-toggle[aria-expanded="true"] {
+  background-color: var(--bgColor-muted, #f6f8fa);
+  border-color: var(--borderColor-default, #d1d9e0);
+  color: var(--fgColor-default, #1f2328);
+}
+
+.repo-shortcuts-toggle svg {
+  fill: currentColor;
+}
+
+.repo-shortcuts-menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  z-index: 30;
+  min-width: 280px;
+  max-width: min(480px, 90vw);
+  max-height: min(360px, 60vh);
+  overflow: auto;
+  padding: 4px 0;
+  border: 1px solid var(--borderColor-default, #d1d9e0);
+  border-radius: 6px;
+  background-color: var(--bgColor-default, #fff);
+  box-shadow: 0 8px 24px rgba(140, 149, 159, 0.2);
+}
+
+.repo-shortcut-item {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  width: 100%;
+  padding: 0 4px 0 0;
+}
+
+.repo-shortcut-item.is-current .repo-shortcut-label {
+  font-weight: 600;
+}
+
+.repo-shortcut-label,
+.repo-shortcut-action {
+  display: block;
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  padding: 6px 12px;
+  border: 0;
+  background: transparent;
+  color: var(--fgColor-default, #1f2328);
+  font: inherit;
+  font-size: 12px;
+  text-align: left;
+  cursor: pointer;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas,
+    "Liberation Mono", monospace;
+}
+
+.repo-shortcut-action {
+  font-family: inherit;
+  width: 100%;
+}
+
+.repo-shortcut-label:hover,
+.repo-shortcut-action:hover,
+.repo-shortcut-item:hover {
+  background-color: var(--bgColor-muted, #f6f8fa);
+}
+
+.repo-shortcut-remove {
+  flex: none;
+  margin: 0;
+  padding: 0 4px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--fgColor-muted, #59636e);
+  font: inherit;
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.repo-shortcut-remove:hover {
+  background-color: var(--bgColor-danger-muted, #ffebe9);
+  color: var(--fgColor-danger, #d1242f);
+}
+
+.repo-shortcut-empty,
+.repo-shortcut-sep {
+  padding: 6px 12px;
+  color: var(--fgColor-muted, #59636e);
+  font-size: 12px;
+}
+
+.repo-shortcut-sep {
+  margin-top: 4px;
+  border-top: 1px solid var(--borderColor-muted, #d1d9e0);
+  padding-top: 8px;
+}
+
+.repo-path-input {
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas,
+    "Liberation Mono", monospace;
+  min-width: 16rem;
   max-width: 40vw;
+  width: 40vw;
+  margin: 0;
+  padding: 2px 6px;
+  border: 1px solid var(--borderColor-accent-emphasis, #0969da);
+  border-radius: 6px;
+  background-color: var(--bgColor-default, #fff);
+  color: var(--fgColor-default, #1f2328);
+  font-size: inherit;
+  line-height: inherit;
+  outline: none;
+}
+
+.repo-path-input.is-error {
+  border-color: var(--borderColor-danger-emphasis, #cf222e);
 }
 
 /* Segmented toggles (Unified/Split, All/Branch/Working) */
