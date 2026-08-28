@@ -30,7 +30,7 @@ The original still applies: split/unified views, system light/dark (or `?mode=`)
 
 ## Install
 
-This fork differs in install `@mdesjardins/prequel` vs prequel, and isn't the npm package. Clone this repo and run the commands below (Bun is the runtime; [pnpm](https://pnpm.io) 11+ installs dependencies and enforces the supply-chain settings in `pnpm-workspace.yaml`). 
+This fork publishes as `@adefee/prequel-ts` (not the original `@mdesjardins/prequel` npm package) and installs a `prequel-ts` command so it does not overwrite the upstream `prequel` binary. Clone this repo and run the commands below (Bun is the runtime; [pnpm](https://pnpm.io) 11+ installs dependencies and enforces the supply-chain settings in `pnpm-workspace.yaml`).
 
 ```bash
 git clone https://github.com/adefee/prequel-ts.git
@@ -39,10 +39,10 @@ pnpm install
 pnpm build                # bundle the browser modules into public/dist
 pnpm start                # review the current directory
 
-# optional, if you want `prequel <target>` to work in bash
+# optional: put `prequel-ts` on your PATH (does not replace `prequel`)
 pnpm add -g .
 # to undo the shim
-pnpm remove -g .
+pnpm remove -g @adefee/prequel-ts
 ```
 
 Or point it at another repo:
@@ -63,7 +63,7 @@ addresses it:
 
 ```bash
 pnpm start -- install claude
-# or, once the CLI is on your PATH: prequel install claude
+# or, once the CLI is on your PATH: prequel-ts install claude
 ```
 
 It goes in `~/.claude/skills` rather than a project's `.claude/skills` because you
@@ -125,7 +125,7 @@ src/comments/commentStore.ts   per-repo comment persistence (~/.prequel)
 src/comments/commentHtml.ts    markdown -> allowlist-sanitized HTML
 src/export/claudeExport.ts     build markdown/JSON export payload
 src/sampleDiff.ts          built-in sample diff (fallback outside a repo)
-src/installer.ts           `prequel install <agent>`
+src/installer.ts           `prequel-ts install <agent>`
 views/review-start.ejs     streamed page chrome (header, loaders)
 views/review-end.ejs       streamed diff body + client modules
 views/ref-picker.ejs       local-branch compare dropdown + last-fetch label

@@ -47,11 +47,11 @@ function parseArgs(argv: string[]): Options {
   return opts;
 }
 
-const HELP = `prequel — local GitHub-style PR diff reviewer
+const HELP = `prequel-ts — local GitHub-style PR diff reviewer
 
 Usage:
-  prequel [repoPath] [--base <ref>] [--port <n>] [--no-open]
-  prequel install <agent> [--project] [--force]
+  prequel-ts [repoPath] [--base <ref>] [--port <n>] [--no-open]
+  prequel-ts install <agent> [--project] [--force]
 
   repoPath   Path to the git repo (default: current directory)
   --base     Base ref to diff against (default: main/master)
@@ -116,7 +116,7 @@ async function runInstall(target: string | undefined, opts: Options): Promise<vo
   if (!target || !TARGET_NAMES.includes(target)) {
     process.stderr.write(
       `\n  ${target ? `Unknown agent: ${target}` : 'Specify an agent'} — supported: ${TARGET_NAMES.join(', ')}\n` +
-        `  e.g. prequel install ${TARGET_NAMES[0]}\n\n`
+        `  e.g. prequel-ts install ${TARGET_NAMES[0]}\n\n`
     );
     process.exitCode = 1;
     return;
@@ -177,7 +177,7 @@ async function main(): Promise<void> {
   process.stdout.write('  Ctrl-C to stop\n');
   for (const target of await staleTargets()) {
     process.stdout.write(
-      `  (your installed ${target} integration is out of date — run: prequel install ${target} --force)\n`
+      `  (your installed ${target} integration is out of date — run: prequel-ts install ${target} --force)\n`
     );
   }
   process.stdout.write('\n');
