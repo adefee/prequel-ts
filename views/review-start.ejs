@@ -1,12 +1,15 @@
 <!doctype html>
 <html
   lang="en"
+  class="is-booting"
+  aria-busy="true"
   data-color-mode="<%= colorMode %>"
   data-light-theme="light"
   data-dark-theme="dark"
   data-view="<%= view %>"
   data-diff="<%= diffMode %>"
   data-branch="<%= head %>"
+  data-base="<%= base %>"
   data-repo="<%= repoPath %>"
   data-comments-enabled="<%= commentsEnabled ? '1' : '0' %>"
 >
@@ -20,27 +23,51 @@
   <link rel="stylesheet" href="/static/css/diff.css" />
 </head>
 <body>
+  <div id="page-progress" class="page-progress is-active" role="progressbar" aria-label="Loading"></div>
   <header class="pr-subnav">
     <div class="pr-subnav-inner">
       <div class="pr-title-row">
-        <% if (treeHtml) { %>
-        <button class="tree-pane-toggle" title="Toggle file tree" aria-label="Toggle file tree">
+        <button class="tree-pane-toggle" title="Toggle file tree" aria-label="Toggle file tree" hidden>
           <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M0 1.75C0 .784.784 0 1.75 0h12.5C15.216 0 16 .784 16 1.75v12.5A1.75 1.75 0 0 1 14.25 16H1.75A1.75 1.75 0 0 1 0 14.25Zm1.75-.25a.25.25 0 0 0-.25.25v12.5c0 .138.112.25.25.25H5V1.5Zm4.75 0v13h7.75a.25.25 0 0 0 .25-.25V1.75a.25.25 0 0 0-.25-.25Z"></path></svg>
         </button>
-        <% } %>
         <h1 class="pr-title">Files changed</h1>
         <span class="pr-refs">
+          <% if (diffMode === 'working') { %>
+          <span class="ref-static">
+            <span class="ref-pill">working tree</span>
+          </span>
+          <span class="ref-arrow">into</span>
+          <% if (isRepo) { %>
+          <%- include('ref-picker', { param: 'head', selected: head, label: 'Compare against branch', fetchedLabel: headFetchedLabel, fetchedTitle: headFetchedTitle, branches }) %>
+          <% } else { %>
+          <span class="ref-static">
+            <span class="ref-pill"><%= head %></span>
+          </span>
+          <% } %>
+          <% } else { %>
+          <% if (isRepo) { %>
+          <%- include('ref-picker', { param: 'head', selected: head, label: 'Current branch', fetchedLabel: headFetchedLabel, fetchedTitle: headFetchedTitle, branches }) %>
+          <span class="ref-arrow">into</span>
+          <%- include('ref-picker', { param: 'base', selected: base, label: 'Target branch', fetchedLabel: baseFetchedLabel, fetchedTitle: baseFetchedTitle, branches }) %>
+          <% } else { %>
           <span class="ref-pill"><%= head %></span>
           <span class="ref-arrow">into</span>
           <span class="ref-pill"><%= base %></span>
+          <% } %>
+          <% } %>
         </span>
+        <% if (isRepo && checkedOut && head && head !== checkedOut) { %>
+        <span class="ref-note">comparing <code><%= head %></code> (not checked out)</span>
+        <% } %>
       </div>
       <div class="pr-meta-row">
-        <span class="diff-summary">
-          <strong><%= summary.fileCount %></strong> changed
-          <%= summary.fileCount === 1 ? 'file' : 'files' %>
-          <span class="summary-additions">+<%= summary.additions %></span>
-          <span class="summary-deletions">−<%= summary.deletions %></span>
+        <span class="pr-meta-left">
+          <span class="diff-summary" data-boot-summary>
+            <span class="inline-loading">Loading…</span>
+          </span>
+          <% if (commentsEnabled) { %>
+          <span id="comments-loading" class="inline-loading" hidden>Loading comments…</span>
+          <% } %>
         </span>
         <span class="pr-meta-right">
           <% if (commentsEnabled) { %>
@@ -74,35 +101,7 @@
       </div>
     </div>
   </header>
-
-  <div class="review-layout">
-    <% if (treeHtml) { %>
-    <aside class="file-tree-pane" aria-label="Changed files">
-      <div class="tree-header">Files changed</div>
-      <nav class="file-tree"><%- treeHtml %></nav>
-    </aside>
-    <div class="tree-resizer" role="separator" aria-orientation="vertical" aria-label="Resize file pane" title="Drag to resize"></div>
-    <% } %>
-    <main class="diff-container">
-      <% if (error) { %>
-        <div class="notice notice-error">Could not read git diff: <%= error %></div>
-      <% } else if (!isRepo) { %>
-        <div class="notice notice-info">Not a git repository — showing a built-in sample diff. Launch <code>prequel</code> from inside a repo to review real changes.</div>
-      <% } %>
-      <%- filesHtml %>
-    </main>
+  <div id="boot-panel" class="boot-panel" role="status" aria-live="polite">
+    <div class="spinner" aria-hidden="true"></div>
+    <p class="boot-copy">Preparing diff…</p>
   </div>
-
-  <div id="toast" class="toast" hidden></div>
-
-  <% if (viteOrigin) { %>
-  <!-- dev: modules come from the Vite server so edits hot-reload -->
-  <script type="module" src="<%= viteOrigin %>/@vite/client"></script>
-  <script type="module" src="<%= viteOrigin %>/client/review.ts"></script>
-  <script type="module" src="<%= viteOrigin %>/client/comments.ts"></script>
-  <% } else { %>
-  <script type="module" src="/static/dist/review.js"></script>
-  <script type="module" src="/static/dist/comments.js"></script>
-  <% } %>
-</body>
-</html>

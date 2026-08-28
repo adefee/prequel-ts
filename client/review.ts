@@ -1,7 +1,7 @@
 // Interactivity: segmented toggles (view/diff), collapse/expand, copy path,
-// "Viewed" state, hunk-context expansion, and the project picker. Toggle
-// choices persist in localStorage and are re-applied on loads where the URL
-// doesn't pin them.
+// "Viewed" state, hunk-context expansion, the project picker, and branch
+// compare pickers. Toggle choices persist in localStorage and are re-applied
+// on loads where the URL doesn't pin them.
 
 import { closestFrom, currentRepoPath, escapeHtml, withRepoQuery } from './dom';
 
@@ -27,12 +27,27 @@ interface RepoSwitchResponse {
 // URL doesn't pin it.
 const PERSIST_PARAMS = ['view', 'diff'];
 
+function markPageLoading(): void {
+  document.documentElement.classList.add('is-loading');
+  document.getElementById('page-progress')?.classList.add('is-active');
+}
+
+function clearPageLoading(): void {
+  document.documentElement.classList.remove('is-loading');
+  if (!document.documentElement.classList.contains('is-booting')) {
+    document.getElementById('page-progress')?.classList.remove('is-active');
+  }
+}
+
+window.addEventListener('pageshow', clearPageLoading);
+
 // Navigate, setting `param=value` and preserving all other query params
 // (including per-tab `repo`).
 function goToParam(param: string, value: string): void {
   if (PERSIST_PARAMS.includes(param)) localStorage.setItem('prequel:' + param, value);
   const params = new URLSearchParams(location.search);
   params.set(param, value);
+  markPageLoading();
   location.search = params.toString();
 }
 
@@ -53,6 +68,7 @@ async function navigateToRepo(
   if (saveShortcut) addShortcut(data.displayPath);
   const params = new URLSearchParams(location.search);
   params.set('repo', data.displayPath);
+  markPageLoading();
   location.search = params.toString();
   return data as RepoSwitchResponse;
 }
@@ -77,7 +93,10 @@ function applySavedParams(): void {
     params.set('repo', repo);
     changed = true;
   }
-  if (changed) location.replace(location.pathname + '?' + params.toString());
+  if (changed) {
+    markPageLoading();
+    location.replace(location.pathname + '?' + params.toString());
+  }
 }
 applySavedParams();
 
@@ -294,6 +313,19 @@ document.addEventListener('click', (e) => {
     return;
   }
 
+  // Same-origin navigation that will re-render the diff (branch pills, etc.)
+  const nav = closestFrom<HTMLAnchorElement>(e.target, 'a[href]');
+  if (nav && !e.metaKey && !e.ctrlKey && !e.shiftKey && !e.altKey && !nav.target) {
+    try {
+      const next = new URL(nav.href, location.href);
+      if (next.origin === location.origin && next.pathname === location.pathname) {
+        markPageLoading();
+      }
+    } catch {
+      /* ignore malformed hrefs */
+    }
+  }
+
   // collapse/expand the whole file
   const collapse = closestFrom(e.target, '.collapse-btn');
   if (collapse) {
@@ -344,6 +376,26 @@ function addShortcut(repoPath: string): void {
 
 function removeShortcut(repoPath: string): void {
   saveShortcuts(loadShortcuts().filter((p) => p !== repoPath));
+}
+
+// --- branch compare pickers ---------------------------------------------
+// Native <details> menus (server-rendered links). JS only closes them when
+// the user clicks outside or presses Escape.
+function closeBranchMenus(): void {
+  document.querySelectorAll<HTMLDetailsElement>('.ref-details[open]').forEach((el) => {
+    el.open = false;
+  });
+}
+
+function initBranchPickers(): void {
+  if (!document.querySelector('.ref-details')) return;
+  document.addEventListener('click', (e) => {
+    if (e.target instanceof Node && document.querySelector('.pr-refs')?.contains(e.target)) return;
+    closeBranchMenus();
+  });
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') closeBranchMenus();
+  });
 }
 
 // --- project picker -----------------------------------------------------
@@ -537,6 +589,7 @@ function initRepoPicker(): void {
   });
 }
 initRepoPicker();
+initBranchPickers();
 
 // --- "Viewed" checkboxes ------------------------------------------------
 // Persist per file id in localStorage and collapse the file.

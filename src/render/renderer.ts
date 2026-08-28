@@ -155,7 +155,7 @@ function hunkHeaderRow(
   const gapAbove = hunk.newStart - 1 - prevNewEnd; // >0 when there's hidden context
   const expandable = ctx.rev && gapAbove > 0;
   const data = expandable
-    ? ` data-expander data-path="${escapeHtml(ctx.path)}" data-rev="${ctx.rev}"` +
+    ? ` data-expander data-path="${escapeHtml(ctx.path)}" data-rev="${escapeHtml(ctx.rev)}"` +
       ` data-new-start="${hunk.newStart}" data-old-start="${hunk.oldStart}"` +
       ` data-prev-new-end="${prevNewEnd}"`
     : '';

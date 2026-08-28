@@ -455,22 +455,27 @@ function groupThreads(comments: UiComment[]): Thread[] {
 }
 
 async function loadComments(): Promise<void> {
+  const loadingEl = document.getElementById('comments-loading');
+  if (loadingEl) loadingEl.hidden = false;
   let comments: UiComment[] = [];
   try {
     const res = await fetch(withRepoQuery(`/api/comments?branch=${encodeURIComponent(branch)}`));
     ({ comments } = (await res.json()) as { comments: UiComment[] });
+    const threads = groupThreads(comments);
+    commentCount = threads.length; // the button counts asks, not messages
+    updateButtons();
+    threads.forEach(({ root: rootComment, replies }) => renderComment(rootComment, replies));
   } catch {
-    return;
+    /* leave the page comment-less on failure */
+  } finally {
+    if (loadingEl) loadingEl.hidden = true;
   }
-  const threads = groupThreads(comments);
-  commentCount = threads.length; // the button counts asks, not messages
-  updateButtons();
-  threads.forEach(({ root: rootComment, replies }) => renderComment(rootComment, replies));
 }
 
 async function runExport(): Promise<void> {
   if (commentCount === 0 || !exportBtn) return;
   exportBtn.disabled = true;
+  exportBtn.classList.add('is-busy');
   try {
     const res = await fetch(withRepoQuery('/api/export'), {
       method: 'POST',
@@ -497,6 +502,7 @@ async function runExport(): Promise<void> {
     toast('Export failed.');
   } finally {
     exportBtn.disabled = false;
+    exportBtn.classList.remove('is-busy');
   }
 }
 
@@ -508,7 +514,10 @@ function removeAllCommentEls(): void {
 
 async function runClear(): Promise<void> {
   if (commentCount === 0) return;
-  if (clearBtn) clearBtn.disabled = true;
+  if (clearBtn) {
+    clearBtn.disabled = true;
+    clearBtn.classList.add('is-busy');
+  }
   try {
     const res = await fetch(withRepoQuery('/api/comments/clear'), {
       method: 'POST',
@@ -526,7 +535,10 @@ async function runClear(): Promise<void> {
   } catch {
     toast('Clear failed.');
   } finally {
-    if (clearBtn) clearBtn.disabled = false;
+    if (clearBtn) {
+      clearBtn.disabled = false;
+      clearBtn.classList.remove('is-busy');
+    }
   }
 }
 

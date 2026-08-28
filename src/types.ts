@@ -57,16 +57,29 @@ export interface DiffSummary {
   deletions: number;
 }
 
-/** Which changes to show. `all` is the superset. */
+/** Which changes to show. `all` is the default and the superset. */
 export type DiffMode = 'all' | 'branch' | 'working';
+export const DEFAULT_DIFF_MODE: DiffMode = 'all';
 export type ViewMode = 'split' | 'unified';
 export type ColorMode = 'light' | 'dark' | 'auto';
 
 /**
  * Where the "new" side of the diff comes from, for on-demand context
- * expansion: `branch` mode diffs against HEAD, everything else the worktree.
+ * expansion: `WORKTREE` reads the on-disk file; anything else is a git rev
+ * (`HEAD` or a local branch) passed to `git show`.
  */
-export type Rev = 'HEAD' | 'WORKTREE';
+export type Rev = 'WORKTREE' | string;
+
+/** A local branch the compare pickers can switch to. */
+export interface BranchInfo {
+  name: string;
+  /** True when this is the checked-out branch. */
+  current: boolean;
+  /** Upstream remote-tracking ref, e.g. `origin/main`, if configured. */
+  upstream: string | null;
+  /** Last time that upstream ref was updated (typically a fetch), ISO-8601. */
+  fetchedAt: string | null;
+}
 
 export type CommentSide = 'new' | 'old' | 'file';
 export type CommentAuthor = 'user' | 'claude';

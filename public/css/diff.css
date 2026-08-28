@@ -27,11 +27,133 @@ body {
   line-height: 1.5;
 }
 
+@keyframes prequel-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes page-progress-slide {
+  0% {
+    transform: translateX(-120%);
+  }
+  100% {
+    transform: translateX(320%);
+  }
+}
+
+.page-progress {
+  position: fixed;
+  top: 0;
+  left: 0;
+  z-index: 200;
+  width: 100%;
+  height: 3px;
+  pointer-events: none;
+  overflow: hidden;
+  opacity: 0;
+  transition: opacity 0.15s ease;
+  background: transparent;
+}
+
+.page-progress.is-active,
+html.is-booting .page-progress,
+html.is-loading .page-progress {
+  opacity: 1;
+}
+
+.page-progress.is-active::after,
+html.is-booting .page-progress::after,
+html.is-loading .page-progress::after {
+  content: "";
+  display: block;
+  height: 100%;
+  width: 35%;
+  background-color: var(--fgColor-accent, #0969da);
+  animation: page-progress-slide 1.1s ease-in-out infinite;
+}
+
+html.is-booting,
+html.is-loading {
+  cursor: progress;
+}
+
+html.is-loading body::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  top: var(--subnav-h, 62px);
+  z-index: 15;
+  pointer-events: none;
+  background-color: var(--bgColor-default, #fff);
+  opacity: 0.45;
+}
+
+.spinner {
+  width: 20px;
+  height: 20px;
+  flex: none;
+  border: 2px solid var(--borderColor-default, #d1d9e0);
+  border-top-color: var(--fgColor-accent, #0969da);
+  border-radius: 50%;
+  animation: prequel-spin 0.7s linear infinite;
+}
+
+.boot-panel {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  min-height: 40vh;
+  padding: 48px 16px;
+  color: var(--fgColor-muted, #59636e);
+}
+
+.boot-copy {
+  margin: 0;
+  font-size: 13px;
+}
+
+.inline-loading {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--fgColor-muted, #59636e);
+}
+
+.inline-loading[hidden] {
+  display: none; /* display:inline-flex would otherwise defeat [hidden] */
+}
+
+.inline-loading::before {
+  content: "";
+  width: 10px;
+  height: 10px;
+  border: 2px solid var(--borderColor-default, #d1d9e0);
+  border-top-color: var(--fgColor-accent, #0969da);
+  border-radius: 50%;
+  animation: prequel-spin 0.7s linear infinite;
+}
+
+.pr-meta-left {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.export-btn.is-busy,
+.clear-btn.is-busy {
+  opacity: 0.7;
+}
+
 /* ---- Subnav / PR header ------------------------------------------------ */
 .pr-subnav {
   position: sticky;
   top: 0;
   z-index: 20;
+  overflow: visible;
   background-color: var(--bgColor-default, #fff);
   border-bottom: 1px solid var(--borderColor-default, #d1d9e0);
 }
@@ -61,6 +183,27 @@ body {
   font-size: 12px;
 }
 
+.ref-static,
+.ref-picker {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  min-width: 0;
+  overflow: visible;
+}
+
+.ref-details {
+  position: relative;
+}
+
+.ref-details > summary {
+  list-style: none;
+}
+
+.ref-details > summary::-webkit-details-marker {
+  display: none;
+}
+
 .ref-pill {
   font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas,
     "Liberation Mono", monospace;
@@ -70,8 +213,126 @@ body {
   padding: 2px 6px;
 }
 
+.ref-pill-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin: 0;
+  border: 1px solid transparent;
+  font: inherit;
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas,
+    "Liberation Mono", monospace;
+  line-height: inherit;
+  cursor: pointer;
+}
+
+.ref-pill-btn::after {
+  content: "";
+  width: 0;
+  height: 0;
+  border-left: 4px solid transparent;
+  border-right: 4px solid transparent;
+  border-top: 5px solid currentColor;
+  opacity: 0.7;
+}
+
+.ref-pill-btn:hover,
+.ref-pill-btn[aria-expanded="true"] {
+  border-color: var(--borderColor-accent-emphasis, #0969da);
+}
+
+.ref-fetched {
+  position: absolute;
+  top: calc(100% + 2px);
+  left: 0;
+  max-width: 14rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--fgColor-muted, #59636e);
+  font-size: 11px;
+  line-height: 1.2;
+}
+
 .ref-arrow {
   color: var(--fgColor-muted, #59636e);
+}
+
+.ref-note {
+  color: var(--fgColor-muted, #59636e);
+  font-size: 12px;
+}
+
+.ref-note code {
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas,
+    "Liberation Mono", monospace;
+  font-size: 12px;
+}
+
+.ref-menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  z-index: 30;
+  min-width: 220px;
+  max-width: min(360px, 90vw);
+  max-height: min(360px, 60vh);
+  overflow: auto;
+  padding: 4px 0;
+  border: 1px solid var(--borderColor-default, #d1d9e0);
+  border-radius: 6px;
+  background-color: var(--bgColor-default, #fff);
+  box-shadow: 0 8px 24px rgba(140, 149, 159, 0.2);
+}
+
+.ref-option {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+  margin: 0;
+  padding: 6px 12px;
+  border: 0;
+  background: transparent;
+  color: var(--fgColor-default, #1f2328);
+  font: inherit;
+  font-size: 12px;
+  text-align: left;
+  text-decoration: none;
+  cursor: pointer;
+  box-sizing: border-box;
+}
+
+.ref-option:hover,
+.ref-option.is-active {
+  background-color: var(--bgColor-muted, #f6f8fa);
+}
+
+.ref-option.is-selected .ref-option-name {
+  font-weight: 600;
+}
+
+.ref-option-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas,
+    "Liberation Mono", monospace;
+}
+
+.ref-option-meta {
+  flex: none;
+  color: var(--fgColor-muted, #59636e);
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.ref-menu-status {
+  padding: 6px 12px;
+  color: var(--fgColor-muted, #59636e);
+  font-size: 12px;
 }
 
 .pr-meta-row {
@@ -79,7 +340,7 @@ body {
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  margin-top: 6px;
+  margin-top: 10px;
   font-size: 12px;
   color: var(--fgColor-muted, #59636e);
 }
@@ -954,6 +1215,24 @@ body {
 
 .expander svg {
   fill: currentColor;
+}
+
+.hunk-header-row[data-loading] .expander {
+  pointer-events: none;
+}
+
+.hunk-header-row[data-loading] .expander svg {
+  display: none;
+}
+
+.hunk-header-row[data-loading] .expander::after {
+  content: "";
+  width: 12px;
+  height: 12px;
+  border: 2px solid currentColor;
+  border-top-color: transparent;
+  border-radius: 50%;
+  animation: prequel-spin 0.7s linear infinite;
 }
 
 /* empty cells in split view (a side with no corresponding line) */

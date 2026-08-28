@@ -12,7 +12,16 @@ import ejs from 'ejs';
 import { renderDiff, renderFileTree } from './render/renderer';
 import { highlightDiff, highlightLines } from './render/highlighter';
 import { annotateWordDiffs } from './render/wordDiff';
-import { getDiff, getBlobLines, resolveRepoRoot } from './git/gitService';
+import {
+  fetchedLabel,
+  fetchedTitle,
+  getCompareMeta,
+  getDiff,
+  getBlobLines,
+  listLocalBranches,
+  resolveCompareRef,
+  resolveRepoRoot,
+} from './git/gitService';
 import { parseDiff, inferLanguage } from './git/diffParser';
 import { sampleDiff } from './sampleDiff';
 import {
@@ -27,24 +36,32 @@ import {
 import { renderCommentHtml } from './comments/commentHtml';
 import { buildMarkdown, buildJson } from './export/claudeExport';
 import { HttpError, messageOf, statusOf } from './errors';
-import type {
-  ColorMode,
-  Comment,
-  CommentAuthor,
-  CommentSide,
-  CommentStatus,
-  CommentWithHtml,
-  Diff,
-  DiffMode,
-  RepoScope,
-  Rev,
-  ViewMode,
+import {
+  DEFAULT_DIFF_MODE,
+  type ColorMode,
+  type Comment,
+  type CommentAuthor,
+  type CommentSide,
+  type CommentStatus,
+  type CommentWithHtml,
+  type Diff,
+  type DiffMode,
+  type BranchInfo,
+  type RepoScope,
+  type Rev,
+  type ViewMode,
 } from './types';
 
 const projectRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const publicDir = path.join(projectRoot, 'public');
 const primerCssDir = path.join(projectRoot, 'node_modules', '@primer', 'primitives', 'dist', 'css');
-const reviewTemplate = path.join(projectRoot, 'views', 'review.ejs');
+const reviewStartTemplate = path.join(projectRoot, 'views', 'review-start.ejs');
+const reviewEndTemplate = path.join(projectRoot, 'views', 'review-end.ejs');
+const PAGE_HEADERS = {
+  'content-type': 'text/html; charset=utf-8',
+  'cache-control': 'no-store',
+  'x-accel-buffering': 'no',
+} as const;
 
 const DIFF_MODES: DiffMode[] = ['all', 'branch', 'working'];
 const MAX_BODY_BYTES = 1024 * 1024;
@@ -156,6 +173,10 @@ async function serveStatic(root: string, relative: string): Promise<Response> {
 
 function trimmedString(value: unknown): string {
   return typeof value === 'string' ? value.trim() : '';
+}
+
+function escapeHtmlText(value: string): string {
+  return value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
 
 export interface ServerOptions {
@@ -288,10 +309,13 @@ export function createApp(options: ServerOptions = {}): (req: Request) => Promis
     const mode = q.get('mode');
     const colorMode: ColorMode = mode === 'light' || mode === 'dark' ? mode : 'auto';
     // ?diff=all|branch|working (which changes to show); ?base=<ref>.
+    // Default is `all` so "head into base" is the real comparison, not just
+    // uncommitted edits vs the current branch.
     const requestedMode = q.get('diff') as DiffMode | null;
     const diffMode: DiffMode =
-      requestedMode && DIFF_MODES.includes(requestedMode) ? requestedMode : 'working';
+      requestedMode && DIFF_MODES.includes(requestedMode) ? requestedMode : DEFAULT_DIFF_MODE;
     const requestedBase = q.get('base') || defaultBase;
+    const requestedHead = q.get('head');
 
     let repoRoot = defaultRepoRoot;
     let displayPath = defaultDisplayPath;
@@ -306,61 +330,146 @@ export function createApp(options: ServerOptions = {}): (req: Request) => Promis
       displayPath = trimmedString(q.get('repo')) || defaultDisplayPath;
     }
 
-    let diff: Diff | null = null;
-    let head: string | undefined;
-    let base: string | undefined;
+    let head: string | undefined = sampleDiff.head;
+    let base: string | undefined = sampleDiff.base;
+    let checkedOut: string | undefined;
+    let branches: BranchInfo[] = [];
     let error = pathError;
 
+    // Cheap metadata first so the header can stream before git diff + highlight.
     if (repoRoot) {
       try {
-        const result = await getDiff(repoRoot, { base: requestedBase, mode: diffMode });
-        diff = parseDiff(result.patch);
-        head = result.head;
-        base = result.base;
-        error = null;
+        const meta = await getCompareMeta(repoRoot, {
+          base: requestedBase,
+          head: requestedHead,
+        });
+        head = meta.head;
+        base = meta.base;
+        checkedOut = meta.checkedOut;
+        branches = await listLocalBranches(repoRoot);
+        error = pathError;
       } catch (err) {
         error = messageOf(err);
       }
     }
 
-    if (!diff) {
-      // No repo (or git failed): fall back to the built-in sample so the UI
-      // still demonstrates. `error` surfaces any git / path failure.
-      diff = sampleDiff;
-      head = sampleDiff.head;
-      base = sampleDiff.base;
-    }
-
-    annotateWordDiffs(diff); // intra-line changed ranges (before highlighting)
-    await highlightDiff(diff); // attaches per-line highlighted HTML in place
-    // Which revision the "new" side comes from, for context expansion:
-    // branch mode diffs against HEAD; all/working show the working tree.
-    const rev: Rev = repoRoot && diffMode === 'branch' ? 'HEAD' : 'WORKTREE';
-    const { filesHtml, summary } = renderDiff(diff, { view, rev });
-    const treeHtml = diff.files.length ? renderFileTree(diff) : '';
-
-    const html = await ejs.renderFile(reviewTemplate, {
+    const hrefWith = (updates: Record<string, string>): string => {
+      const params = new URLSearchParams(url.search);
+      for (const [key, value] of Object.entries(updates)) params.set(key, value);
+      return `?${params.toString()}`;
+    };
+    const branchOptions = branches.map((b) => ({
+      ...b,
+      fetchedLabel: fetchedLabel(b.fetchedAt),
+      fetchedTitle: fetchedTitle(b),
+      headHref: hrefWith({ head: b.name }),
+      baseHref: hrefWith({ base: b.name }),
+    }));
+    const headInfo = branches.find((b) => b.name === head);
+    const baseInfo = branches.find((b) => b.name === base);
+    const shellLocals = {
       repoPath: displayPath,
       repoName: path.basename(displayPath) || displayPath,
       isRepo: Boolean(repoRoot),
       base,
       head,
+      checkedOut,
+      branches: branchOptions,
+      headFetchedLabel: headInfo?.fetchedAt ? fetchedLabel(headInfo.fetchedAt) : '',
+      headFetchedTitle: fetchedTitle(headInfo ?? { upstream: null, fetchedAt: null }),
+      baseFetchedLabel: baseInfo?.fetchedAt ? fetchedLabel(baseInfo.fetchedAt) : '',
+      baseFetchedTitle: fetchedTitle(baseInfo ?? { upstream: null, fetchedAt: null }),
       diffMode,
       colorMode,
       view,
-      error,
-      filesHtml,
-      treeHtml,
-      summary,
       commentsEnabled: Boolean(repoRoot),
-      viteOrigin,
+    };
+
+    const encoder = new TextEncoder();
+    const stream = new ReadableStream<Uint8Array>({
+      async start(controller) {
+        const write = (html: string) => controller.enqueue(encoder.encode(html));
+        try {
+          write(await ejs.renderFile(reviewStartTemplate, shellLocals));
+
+          let diff: Diff | null = null;
+          if (repoRoot) {
+            try {
+              const result = await getDiff(repoRoot, {
+                base: requestedBase,
+                head: requestedHead,
+                mode: diffMode,
+              });
+              diff = parseDiff(result.patch);
+              head = result.head;
+              base = result.base;
+              checkedOut = result.checkedOut;
+              error = pathError;
+            } catch (err) {
+              error = messageOf(err);
+            }
+          }
+
+          if (!diff) {
+            // No repo (or git failed): fall back to the built-in sample so the UI
+            // still demonstrates. `error` surfaces any git / path failure.
+            diff = sampleDiff;
+            head = head || sampleDiff.head;
+            base = base || sampleDiff.base;
+          }
+
+          annotateWordDiffs(diff);
+          await highlightDiff(diff);
+          const headIsCheckout = Boolean(
+            repoRoot && head && (head === checkedOut || head === 'HEAD')
+          );
+          const rev: Rev =
+            repoRoot && (diffMode === 'branch' || (diffMode === 'all' && !headIsCheckout))
+              ? head || 'HEAD'
+              : 'WORKTREE';
+          const { filesHtml, summary } = renderDiff(diff, { view, rev });
+          const treeHtml = diff.files.length ? renderFileTree(diff) : '';
+          write(
+            await ejs.renderFile(reviewEndTemplate, {
+              ...shellLocals,
+              head,
+              base,
+              checkedOut,
+              error,
+              filesHtml,
+              treeHtml,
+              summary,
+              viteOrigin,
+            })
+          );
+        } catch (err) {
+          write(
+            `<style>#boot-panel{display:none!important}</style>` +
+              `<div class="review-layout"><main class="diff-container">` +
+              `<div class="notice notice-error">Could not read git diff: ${escapeHtmlText(messageOf(err))}</div>` +
+              `</main></div></body></html>`
+          );
+        } finally {
+          controller.close();
+        }
+      },
     });
-    return new Response(html, {
-      headers: { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store' },
-    });
+    return new Response(stream, { headers: PAGE_HEADERS });
   }
 
   // --- routes ------------------------------------------------------------
+
+  async function getBranches(req: Request, url: URL): Promise<Response> {
+    const scope = await requireRepo(req, url);
+    const branches = await listLocalBranches(scope.repoRoot!);
+    return json({
+      branches: branches.map((b) => ({
+        ...b,
+        fetchedLabel: fetchedLabel(b.fetchedAt),
+        fetchedTitle: fetchedTitle(b),
+      })),
+    });
+  }
 
   // Validate a path the UI wants to open (does not change any global state —
   // the tab then navigates with ?repo= so each tab stays independent).
@@ -376,16 +485,24 @@ export function createApp(options: ServerOptions = {}): (req: Request) => Promis
   }
 
   // On-demand context lines for hunk expansion.
-  // ?path=&rev=HEAD|WORKTREE&start=&end= (new-side line numbers, 1-based).
+  // ?path=&rev=WORKTREE|<git-rev>&start=&end= (new-side line numbers, 1-based).
   async function getContext(req: Request, url: URL): Promise<Response> {
     const scope = await requireRepo(req, url);
     const q = url.searchParams;
     const filePath = q.get('path') || '';
-    const rev: Rev = q.get('rev') === 'HEAD' ? 'HEAD' : 'WORKTREE';
+    const rawRev = q.get('rev') || '';
     const start = parseInt(q.get('start') ?? '', 10);
     const end = parseInt(q.get('end') ?? '', 10);
     if (!filePath || !Number.isFinite(start) || !Number.isFinite(end)) {
       throw new HttpError(400, 'bad params');
+    }
+    let rev: Rev;
+    if (rawRev === 'WORKTREE') {
+      rev = 'WORKTREE';
+    } else {
+      const resolved = await resolveCompareRef(scope.repoRoot!, rawRev);
+      if (!resolved) throw new HttpError(400, 'bad rev');
+      rev = resolved;
     }
     const { lines, from, eof } = await getBlobLines(scope.repoRoot!, {
       rev,
@@ -576,6 +693,7 @@ export function createApp(options: ServerOptions = {}): (req: Request) => Promis
         if (pathname === '/healthz') return await healthz(url);
         if (pathname === '/api/events') return openEventStream(req);
         if (pathname === '/api/context') return await getContext(req, url);
+        if (pathname === '/api/branches') return await getBranches(req, url);
         if (pathname === '/api/comments') return await getCommentList(req, url);
         if (pathname.startsWith('/static/')) {
           return await serveStatic(publicDir, pathname.slice('/static/'.length));

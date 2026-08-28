@@ -1,0 +1,23 @@
+<span class="ref-picker" data-param="<%= param %>">
+  <details class="ref-details" name="prequel-ref">
+    <summary class="ref-pill ref-pill-btn" aria-label="<%= label %>" title="<%= fetchedTitle %>"><%= selected %></summary>
+    <div class="ref-menu" role="listbox">
+      <% if (!branches.length) { %>
+      <div class="ref-menu-status">No local branches</div>
+      <% } %>
+      <% branches.forEach(function (branch) { %>
+      <a class="ref-option<%= branch.name === selected ? ' is-selected' : '' %><%= branch.current ? ' is-checked-out' : '' %>"
+         role="option"
+         aria-selected="<%= branch.name === selected ? 'true' : 'false' %>"
+         href="<%= param === 'head' ? branch.headHref : branch.baseHref %>"
+         title="<%= branch.fetchedTitle %>">
+        <span class="ref-option-name"><%= branch.name %><% if (branch.current) { %> (checked out)<% } %></span>
+        <span class="ref-option-meta"><%= branch.fetchedLabel %></span>
+      </a>
+      <% }) %>
+    </div>
+  </details>
+  <% if (fetchedLabel) { %>
+  <span class="ref-fetched" title="<%= fetchedTitle %>"><%= fetchedLabel %></span>
+  <% } %>
+</span>

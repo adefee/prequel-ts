@@ -11,7 +11,7 @@ GitHub's Pull Request **Files changed** tab. Supports system light/dark mode.
 
 If you're like me, you've probably spent hundreds of hours over more than a decade reviewing code, and you've done almost all of it through Github's pull request review interface. It's comfortable, and for me, it shifts my brain into a "mode" where it can efficiently evaluate and comment on code.
 
-In the day of agentic coding, I was finding that my brain likes this style of review so much that I'd actually push code to Github to review it before telling Claude what changes I wanted made. That seemed silly, so I created this thing. It's basically a simulator of Github's PR interface, but works only on your locally staged and unstaged files. You can comment on them and easily dump this into your Claude Code session to make changes.
+In the day of agentic coding, I was finding that my brain likes this style of review so much that I'd actually push code to Github to review it before telling Claude what changes I wanted made. That seemed silly, so I created this thing. It's basically a simulator of Github's PR interface, but local: the current branch into its base, plus any staged, unstaged, or untracked files. You can comment on them and easily dump this into your Claude Code session to make changes.
 
 In the future I'd like to tighten the feedback loop with Claude and not copy/paste my comments for it to work on, not manually refresh the page, etc., but this was mostly a proof of concept.
 
@@ -99,9 +99,11 @@ pnpm typecheck                    # tsc --noEmit, browser + server configs
 bundled modules from `public/dist/`.
 
 URL params (all optional): `?view=split|unified` picks the layout,
-`?diff=working|branch|all` picks which changes to show (default `working`;
-persists), `?repo=<path>` picks the project for that tab, `?base=<ref>` overrides
-the base branch, `?mode=light|dark` forces a color mode (default follows the OS).
+`?diff=all|branch|working` picks which changes to show (default `all` — the
+branch vs its base, plus uncommitted work; persists), `?repo=<path>` picks the
+project for that tab, `?head=<ref>` / `?base=<ref>` pick the compared branches
+(the header pills list local branches; this does not check anything out),
+`?mode=light|dark` forces a color mode (default follows the OS).
 
 ## Layout
 
@@ -118,7 +120,9 @@ src/render/wordDiff.ts     intra-line (word-level) diff ranges
 src/comments/commentStore.ts   per-repo comment persistence (~/.prequel)
 src/export/claudeExport.ts     build markdown/JSON export payload
 src/sampleDiff.ts          built-in sample diff (fallback outside a repo)
-views/review.ejs           page shell (Primer tokens, diff.css, client modules)
+views/review-start.ejs     streamed page chrome (header, loaders)
+views/review-end.ejs       streamed diff body + client modules
+views/ref-picker.ejs       local-branch compare dropdown
 public/css/diff.css        GitHub "Files changed" clone
 public/dist/               Vite output, served at /static/dist (generated)
 client/review.ts           toggles, collapse/expand, Viewed, hunk expansion, project picker

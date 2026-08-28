@@ -1,0 +1,59 @@
+  <style>#boot-panel{display:none!important}</style>
+  <div class="review-layout">
+    <% if (treeHtml) { %>
+    <aside class="file-tree-pane" aria-label="Changed files">
+      <div class="tree-header">Files changed</div>
+      <nav class="file-tree"><%- treeHtml %></nav>
+    </aside>
+    <div class="tree-resizer" role="separator" aria-orientation="vertical" aria-label="Resize file pane" title="Drag to resize"></div>
+    <% } %>
+    <main class="diff-container">
+      <% if (error) { %>
+        <div class="notice notice-error">Could not read git diff: <%= error %></div>
+      <% } else if (!isRepo) { %>
+        <div class="notice notice-info">Not a git repository — showing a built-in sample diff. Launch <code>prequel</code> from inside a repo to review real changes.</div>
+      <% } else if (summary.fileCount === 0) { %>
+        <div class="notice notice-info">
+          <% if (diffMode === 'working') { %>
+            No uncommitted changes on <code><%= head %></code>.
+            Switch to All or Branch to review commits from <code><%= head %></code> into <code><%= base %></code>.
+          <% } else if (diffMode === 'branch') { %>
+            No committed changes from <code><%= head %></code> into <code><%= base %></code>.
+            Switch to All or Working to include uncommitted changes.
+          <% } else { %>
+            No changes from <code><%= head %></code> into <code><%= base %></code>.
+          <% } %>
+        </div>
+      <% } %>
+      <%- filesHtml %>
+    </main>
+  </div>
+
+  <div id="toast" class="toast" hidden></div>
+
+  <script>
+    document.documentElement.classList.remove('is-booting');
+    document.documentElement.removeAttribute('aria-busy');
+    document.getElementById('page-progress')?.classList.remove('is-active');
+    <% if (treeHtml) { %>
+    document.querySelector('.tree-pane-toggle')?.removeAttribute('hidden');
+    <% } %>
+    (function () {
+      var el = document.querySelector('[data-boot-summary]');
+      if (!el) return;
+      el.removeAttribute('data-boot-summary');
+      el.innerHTML = '<strong><%= summary.fileCount %></strong> changed <%= summary.fileCount === 1 ? "file" : "files" %> <span class="summary-additions">+<%= summary.additions %></span> <span class="summary-deletions">−<%= summary.deletions %></span>';
+    })();
+  </script>
+
+  <% if (viteOrigin) { %>
+  <!-- dev: modules come from the Vite server so edits hot-reload -->
+  <script type="module" src="<%= viteOrigin %>/@vite/client"></script>
+  <script type="module" src="<%= viteOrigin %>/client/review.ts"></script>
+  <script type="module" src="<%= viteOrigin %>/client/comments.ts"></script>
+  <% } else { %>
+  <script type="module" src="/static/dist/review.js"></script>
+  <script type="module" src="/static/dist/comments.js"></script>
+  <% } %>
+</body>
+</html>
