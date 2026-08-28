@@ -1,42 +1,54 @@
-# prequel
+# prequel-ts
 
 *Review it before it's a pull request.*
 
-A local web app that renders a Git repo's diff using a UI that looks like
-GitHub's Pull Request **Files changed** tab. Supports system light/dark mode.
+A TypeScript fork of [mdesjardins/prequel](https://github.com/mdesjardins/prequel). Same idea: a local web app that renders a Git repo's diff in a UI that looks like GitHub's Pull Request **Files changed** tab, with comments you can hand to Claude. This fork adds multi-project tabs, branch picking, and tighter git/security behavior.
 
 <img width="1285" height="718" alt="Screen Shot 2026-08-11 at 11 40 30" src="https://github.com/user-attachments/assets/67adea24-2a1b-4fb2-921c-73618fe2a273" />
 
 ## Why
 
-If you're like me, you've probably spent hundreds of hours over more than a decade reviewing code, and you've done almost all of it through Github's pull request review interface. It's comfortable, and for me, it shifts my brain into a "mode" where it can efficiently evaluate and comment on code.
+If you review code through GitHub's pull request UI, that layout is comfortable — it puts your brain in a mode that can evaluate and comment efficiently. In the day of agentic coding, that can mean pushing a branch just so you can review it before telling Claude what to change.
 
-In the day of agentic coding, I was finding that my brain likes this style of review so much that I'd actually push code to Github to review it before telling Claude what changes I wanted made. That seemed silly, so I created this thing. It's basically a simulator of Github's PR interface, but local: the current branch into its base, plus any staged, unstaged, or untracked files. You can comment on them and easily dump this into your Claude Code session to make changes.
+Prequel is a local simulator of that interface: a branch into its base, plus staged, unstaged, or untracked files. You comment on the diff and either export those comments or let Claude Code work them through the running server.
 
-In the future I'd like to tighten the feedback loop with Claude and not copy/paste my comments for it to work on, not manually refresh the page, etc., but this was mostly a proof of concept.
+## What's different in this fork
 
-## Note
+**TypeScript.** The CLI, server, git layer, renderer, and browser modules are TypeScript. Bun still runs the server directly (no transpile step). The page chrome is still EJS under `views/` — those templates were not rewritten.
 
-This is almost entirely vibe-coded. I've barely even looked at the code. Having said that, I am a giant hypocrite and am not accepting any AI created contributions to this codebase right now. In fact, I'm not really accepting *any* changes yet. There's a lot I want to do personally before opening this up to that. 
+**pnpm 11+.** Dependencies are installed with pnpm 11 (not Bun as the package manager). Settings live in `pnpm-workspace.yaml`: minimum release age, store integrity checks, and no unapproved lifecycle/build scripts.
+
+**Several projects at once.** Click the header path to open a different repo in *this* tab. The caret next to it saves and lists bookmarked paths (localStorage). One running server backs many browser tabs: each tab carries its own `?repo=<path>`, so switching a tab does not change the others.
+
+**Branch compare.** The header pills list local branches. You can pick any local branch as the head or the base (`?head=` / `?base=`) without checking anything out. All / Branch / Working are consistent with that choice: the working-tree overlay only applies when the selected head *is* the checkout; comparing another branch stays a committed-ref diff. When the head is not checked out, the header says so.
+
+**Fetch freshness.** Each branch option shows when its upstream was last fetched (`fetched 12m ago`, `no remote`, …). Hover for the exact time and the tracking ref.
+
+**Hardening.** Comment markdown is allowlist-sanitized before it is interpolated as HTML. User-supplied git refs are rejected unless they are a real, safe commit name. Mutations require same-origin. Request bodies are size-capped. Static files cannot escape their roots. Paths with NULs are refused. The server binds loopback-only. The Claude skill installer refuses to write through a symlink.
+
+**Loading.** The header streams first (path, branch pills, toggles) while git diff + highlight finish, with a boot panel and a progress bar on navigation.
+
+The original still applies: split/unified views, system light/dark (or `?mode=`), line and file comments, live SSE updates when Claude works a review, and `prequel install claude`.
 
 ## Install
 
-prequel runs on [Bun](https://bun.sh) — the CLI and server are TypeScript that
-Bun executes directly, so there's no build step to run the app.
+This fork is not the `@mdesjardins/prequel` npm package. Run it from a clone (Bun is the runtime; [pnpm](https://pnpm.io) 11+ installs dependencies and enforces the supply-chain settings in `pnpm-workspace.yaml`).
 
 ```bash
-bun install -g @mdesjardins/prequel
+git clone https://github.com/adefee/prequel-ts.git
+cd prequel-ts
+pnpm install
+pnpm build                # bundle the browser modules into public/dist
+pnpm start                # review the current directory
 ```
 
-Then run it from inside any git repo:
+Or point it at another repo:
 
 ```bash
-prequel [repoPath] [--base <ref>] [--port <n>] [--no-open]
+pnpm start -- /path/to/repo [--base <ref>] [--port <n>] [--no-open]
 ```
 
-One running server can back several browser tabs on different projects: each tab
-carries its own `?repo=<path>`, and the header path is editable (with a dropdown
-of saved projects) to switch a tab without touching the others.
+One process can back several tabs on different projects. Each tab's `?repo=` and the header path picker are independent.
 
 ## Closing the loop with Claude
 
@@ -45,7 +57,8 @@ read your comments straight from the running server and resolve each one as it
 addresses it:
 
 ```bash
-prequel install claude
+pnpm start -- install claude
+# or, once the CLI is on your PATH: prequel install claude
 ```
 
 It goes in `~/.claude/skills` rather than a project's `.claude/skills` because you
@@ -70,39 +83,24 @@ decision or says why it *didn't* make a change. Its messages are labelled and
 accented so they're distinguishable from yours, and they never re-enter its own
 work queue. You can also resolve or reopen any comment yourself from the thread.
 
-## Run from source
-
-Dependencies are managed with [pnpm](https://pnpm.io) 11+, which enforces the
-supply-chain settings in `pnpm-workspace.yaml` (minimum release age, store
-integrity, no unapproved lifecycle scripts). Bun is the runtime, not the package
-manager.
+## Development
 
 ```bash
-pnpm install
-pnpm build                # bundle the browser modules into public/dist
-pnpm start                # run the CLI against the current directory
-```
-
-For development, `pnpm dev` runs both halves: Vite serves `client/*.ts` with hot
-reload, and Bun restarts the server when anything under `src/` or `bin/` changes.
-It listens on a fixed port (4711 by default, `PREQUEL_PORT` to change it) so the
-browser URL and Vite's socket survive restarts. Arguments are forwarded to the
-CLI:
-
-```bash
-pnpm dev                          # review the current directory
+pnpm dev                          # review the current directory (Vite HMR + bun --watch)
 pnpm dev -- ~/code/other-project  # review somewhere else
 pnpm typecheck                    # tsc --noEmit, browser + server configs
 ```
 
-`pnpm build` is required before `pnpm start`: outside dev, the page loads the
-bundled modules from `public/dist/`.
+`pnpm dev` listens on a fixed port (4711 by default, `PREQUEL_PORT` to change it)
+so the browser URL and Vite's socket survive restarts. `pnpm build` is required
+before `pnpm start`: outside dev, the page loads the bundled modules from
+`public/dist/`.
 
 URL params (all optional): `?view=split|unified` picks the layout,
 `?diff=all|branch|working` picks which changes to show (default `all` — the
-branch vs its base, plus uncommitted work; persists), `?repo=<path>` picks the
-project for that tab, `?head=<ref>` / `?base=<ref>` pick the compared branches
-(the header pills list local branches; this does not check anything out),
+branch vs its base, plus uncommitted work when the head is the checkout;
+persists), `?repo=<path>` picks the project for that tab, `?head=<ref>` /
+`?base=<ref>` pick the compared branches (does not check anything out),
 `?mode=light|dark` forces a color mode (default follows the OS).
 
 ## Layout
@@ -113,20 +111,24 @@ src/server.ts              Bun.serve routes: page, /api/*, SSE, static files
 src/types.ts               shared domain types (diff model, comments, repo scope)
 src/errors.ts              errors that carry an HTTP status
 src/git/gitService.ts      git CLI wrapper: refs, diff generation, blob lines
+src/git/gitService.test.ts compare modes, other-branch head, fetch stamps, ref safety
 src/git/diffParser.ts      raw patch text -> diff model
 src/render/renderer.ts     diff model -> GitHub-faithful HTML (unified + split)
 src/render/highlighter.ts  Shiki dual-theme syntax highlighting + word-diff overlay
 src/render/wordDiff.ts     intra-line (word-level) diff ranges
 src/comments/commentStore.ts   per-repo comment persistence (~/.prequel)
+src/comments/commentHtml.ts    markdown -> allowlist-sanitized HTML
 src/export/claudeExport.ts     build markdown/JSON export payload
 src/sampleDiff.ts          built-in sample diff (fallback outside a repo)
+src/installer.ts           `prequel install <agent>`
 views/review-start.ejs     streamed page chrome (header, loaders)
 views/review-end.ejs       streamed diff body + client modules
-views/ref-picker.ejs       local-branch compare dropdown
+views/ref-picker.ejs       local-branch compare dropdown + last-fetch label
 public/css/diff.css        GitHub "Files changed" clone
 public/dist/               Vite output, served at /static/dist (generated)
 client/review.ts           toggles, collapse/expand, Viewed, hunk expansion, project picker
 client/comments.ts         hover-+, compose, inject threads, delete, live updates
 client/dom.ts              shared DOM/URL helpers
 scripts/dev.ts             runs Vite + `bun --watch` together
+pnpm-workspace.yaml        pnpm 11+ supply-chain settings
 ```
