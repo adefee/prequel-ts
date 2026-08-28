@@ -13,7 +13,7 @@
 
 import { createHighlighter } from 'shiki';
 import type { BundledLanguage, Highlighter } from 'shiki';
-import type { CharRange, RenderDiff } from '../types';
+import type { CharRange, RenderDiff } from './renderer';
 
 const THEMES = { light: 'github-light', dark: 'github-dark' } as const;
 

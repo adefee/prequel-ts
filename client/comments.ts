@@ -3,10 +3,10 @@
 // clear (with undo) and export-then-clear, for the review→hand-off→re-review loop.
 
 import { closestFrom, escapeHtml, withRepoQuery } from './dom';
-import type { CommentSide, CommentWithHtml } from '../src/types';
+import type { Comment, CommentSide } from '../src/comments/commentStore';
 
 /** A comment as the API returns it (body plus rendered markdown). */
-type UiComment = CommentWithHtml;
+type UiComment = Comment & { bodyHtml: string };
 
 interface EventBase {
   origin: string | null;

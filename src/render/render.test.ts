@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import type { ReviewDiff } from '../types';
+import type { ReviewDiff } from '../git/diff';
 import { annotateWordDiffs, computeWordDiff } from './wordDiff';
 import { highlightDiff } from './highlighter';
 import { renderDiff } from './renderer';

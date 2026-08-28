@@ -2,8 +2,8 @@
 // grouped-by-file, code-fenced markdown (embeds the repo root + each comment's
 // code snapshot so Claude can locate the spot even if line numbers shifted).
 
-import { inferLanguage } from '../git/diffParser';
-import type { Comment } from '../types';
+import type { Comment } from '../comments/commentStore';
+import { inferLanguage } from '../git/diff';
 
 function lineLabel(c: Comment): string {
   if (c.startLine === c.endLine) return `L${c.startLine}`;

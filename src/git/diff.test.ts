@@ -3,7 +3,7 @@ import { execFileSync } from 'node:child_process';
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import { parseDiff } from './diffParser';
+import { parseDiff } from './diff';
 
 const dirs: string[] = [];
 function git(repo: string, ...args: string[]): string {

@@ -3,7 +3,18 @@
 import { execFile } from 'node:child_process';
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import { DEFAULT_DIFF_MODE, type BranchInfo, type DiffMode, type Rev } from '../types';
+
+export type DiffMode = 'all' | 'branch' | 'working';
+export const DEFAULT_DIFF_MODE: DiffMode = 'all';
+
+export type Rev = 'WORKTREE' | string;
+
+export interface BranchInfo {
+  name: string;
+  current: boolean;
+  upstream: string | null;
+  fetchedAt: string | null;
+}
 
 interface GitOptions {
   /** Non-zero exit codes to treat as success (git diff --no-index returns 1). */

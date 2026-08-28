@@ -4,8 +4,7 @@ import { promisify } from 'node:util';
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import { getDiff, isSafeRefName, listLocalBranches } from './gitService';
-import { DEFAULT_DIFF_MODE } from '../types';
+import { DEFAULT_DIFF_MODE, getDiff, isSafeRefName, listLocalBranches } from './repository';
 
 const execFileAsync = promisify(execFile);
 const tmpDirs: string[] = [];

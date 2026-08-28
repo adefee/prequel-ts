@@ -1,7 +1,7 @@
 // A hardcoded diff model shown when prequel is pointed at something that isn't
 // a git repo, so the UI still demonstrates the render pipeline and theming.
 
-import type { ReviewDiff } from './types';
+import type { ReviewDiff } from './git/diff';
 
 export const sampleDiff: ReviewDiff = {
   base: 'main',

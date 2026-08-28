@@ -9,10 +9,11 @@ import path from 'node:path';
 import fs from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import ejs from 'ejs';
-import { renderDiff, renderFileTree } from './render/renderer';
+import { renderDiff, renderFileTree, type ViewMode } from './render/renderer';
 import { highlightDiff, highlightLines } from './render/highlighter';
 import { annotateWordDiffs } from './render/wordDiff';
 import {
+  DEFAULT_DIFF_MODE,
   fetchedLabel,
   fetchedTitle,
   getCompareMeta,
@@ -21,8 +22,11 @@ import {
   listLocalBranches,
   resolveCompareRef,
   resolveRepoRoot,
-} from './git/gitService';
-import { parseDiff, inferLanguage } from './git/diffParser';
+  type BranchInfo,
+  type DiffMode,
+  type Rev,
+} from './git/repository';
+import { parseDiff, inferLanguage, type ReviewDiff } from './git/diff';
 import { sampleDiff } from './sampleDiff';
 import {
   listComments as listCommentsStore,
@@ -32,25 +36,25 @@ import {
   deleteComment as deleteCommentStore,
   clearComments as clearCommentsStore,
   restoreCleared as restoreClearedStore,
-} from './comments/commentStore';
-import { renderCommentHtml } from './comments/commentHtml';
-import { buildMarkdown, buildJson } from './export/claudeExport';
-import { HttpError, messageOf, statusOf } from './errors';
-import {
-  DEFAULT_DIFF_MODE,
-  type ColorMode,
   type Comment,
   type CommentAuthor,
   type CommentSide,
   type CommentStatus,
-  type CommentWithHtml,
-  type ReviewDiff,
-  type DiffMode,
-  type BranchInfo,
-  type RepoScope,
-  type Rev,
-  type ViewMode,
-} from './types';
+} from './comments/commentStore';
+import { renderCommentHtml } from './comments/commentHtml';
+import { buildMarkdown, buildJson } from './export/claudeExport';
+import { HttpError, messageOf, statusOf } from './errors';
+
+type ColorMode = 'light' | 'dark' | 'auto';
+
+interface CommentWithHtml extends Comment {
+  bodyHtml: string;
+}
+
+interface RepoScope {
+  repoRoot: string | null;
+  displayPath: string;
+}
 
 const projectRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const publicDir = path.join(projectRoot, 'public');

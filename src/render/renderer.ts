@@ -1,19 +1,34 @@
 // Renders a diff model into GitHub-"Files changed"-faithful HTML.
 // Supports unified (inline) and split (side-by-side) views.
 
-import type {
-  RenderDiff,
-  RenderFile,
-  ReviewDiff,
-  ReviewFile,
-  RenderLine,
-  DiffSummary,
-  FileStatus,
-  RenderHunk,
-  LineType,
-  Rev,
-  ViewMode,
-} from '../types';
+import type { FileStatus, LineType, ReviewDiff, ReviewFile, ReviewHunk, ReviewLine } from '../git/diff';
+import type { Rev } from '../git/repository';
+
+export type CharRange = [number, number];
+export type ViewMode = 'split' | 'unified';
+
+export interface RenderLine extends ReviewLine {
+  wordRanges?: CharRange[];
+  html?: string;
+}
+
+export interface RenderHunk extends Omit<ReviewHunk, 'lines'> {
+  lines: RenderLine[];
+}
+
+export interface RenderFile extends Omit<ReviewFile, 'hunks'> {
+  hunks: RenderHunk[];
+}
+
+export interface RenderDiff extends Omit<ReviewDiff, 'files'> {
+  files: RenderFile[];
+}
+
+interface DiffSummary {
+  fileCount: number;
+  additions: number;
+  deletions: number;
+}
 
 function escapeHtml(s: string | null | undefined): string {
   return String(s)

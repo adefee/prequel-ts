@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url';
 import process from 'node:process';
 import open from 'open';
 import { startServer } from '../src/server';
-import { resolveRepoRoot } from '../src/git/gitService';
+import { resolveRepoRoot } from '../src/git/repository';
 import { install, staleTargets, TARGET_NAMES, type InstallResult } from '../src/installer';
 
 const VERSION = (

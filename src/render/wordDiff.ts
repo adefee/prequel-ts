@@ -1,5 +1,6 @@
 import { diffWordsWithSpace } from 'diff';
-import type { CharRange, RenderDiff, RenderLine, ReviewDiff } from '../types';
+import type { ReviewDiff } from '../git/diff';
+import type { CharRange, RenderDiff, RenderLine } from './renderer';
 
 export interface WordDiff {
   oldRanges: CharRange[];
@@ -8,8 +9,11 @@ export interface WordDiff {
 
 function appendRange(ranges: CharRange[], start: number, end: number): void {
   const last = ranges[ranges.length - 1];
-  if (last && last[1] === start) last[1] = end;
-  else ranges.push([start, end]);
+  if (last && last[1] === start) {
+    last[1] = end;
+  } else {
+    ranges.push([start, end]);
+  }
 }
 
 export function computeWordDiff(oldText: string, newText: string): WordDiff {
@@ -46,25 +50,35 @@ export function annotateWordDiffs(diff: ReviewDiff): RenderDiff {
       ...file,
       hunks: file.hunks.map((hunk) => {
         const lines: RenderLine[] = hunk.lines.map((line) => ({ ...line }));
+
         if (!file.isBinary) {
           let i = 0;
+
           while (i < lines.length) {
-            if (lines[i]!.type !== 'del' && lines[i]!.type !== 'add') { i++; continue; }
+            if (lines[i]!.type !== 'del' && lines[i]!.type !== 'add') {
+              i++;
+              continue;
+            }
+
             const dels: RenderLine[] = [];
             const adds: RenderLine[] = [];
             let j = i;
+
             while (j < lines.length && (lines[j]!.type === 'del' || lines[j]!.type === 'add')) {
               (lines[j]!.type === 'del' ? dels : adds).push(lines[j]!);
               j++;
             }
+
             for (let k = 0; k < Math.min(dels.length, adds.length); k++) {
               const ranges = computeWordDiff(dels[k]!.content, adds[k]!.content);
               dels[k]!.wordRanges = ranges.oldRanges;
               adds[k]!.wordRanges = ranges.newRanges;
             }
+
             i = j;
           }
         }
+
         return { ...hunk, lines };
       }),
     })),
