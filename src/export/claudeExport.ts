@@ -6,7 +6,17 @@ import { inferLanguage } from '../git/diffParser';
 import type { Comment } from '../types';
 
 function lineLabel(c: Comment): string {
-  return c.startLine === c.endLine ? `Line ${c.startLine}` : `Lines ${c.startLine}–${c.endLine}`;
+  if (c.startLine === c.endLine) return `L${c.startLine}`;
+  return `L${c.startLine}–${c.endLine}`;
+}
+
+function severityPrefix(c: Comment): string {
+  // Older comments have no severity; treat them as a plain note so exports
+  // stay readable instead of growing a "undefined" badge.
+  const severity = (c as Comment & { severity?: string }).severity;
+  if (severity === 'blocking') return '**Blocking** — ';
+  if (severity === 'suggestion') return '**Suggestion** — ';
+  return '';
 }
 
 // Comment ids ride along as HTML comments: invisible in rendered markdown,
@@ -61,7 +71,7 @@ export function buildMarkdown(
       if (c.side === 'file') {
         out.push('### File comment');
         out.push(idMarker(c));
-        out.push(blockquote(c.body));
+        out.push(blockquote(severityPrefix(c) + (c.body || '')));
         out.push('');
         continue;
       }
@@ -74,7 +84,7 @@ export function buildMarkdown(
         out.push(code);
         out.push(fence);
       }
-      out.push(blockquote(c.body));
+      out.push(blockquote(severityPrefix(c) + (c.body || '')));
       out.push('');
     }
   }
@@ -90,7 +100,7 @@ export function buildJson(comments: Comment[]): string {
         side: c.side,
         lines: c.side === 'file' ? null : [c.startLine, c.endLine],
         code: (c.lineSnapshot || []).join('\n'),
-        comment: c.body,
+        comment: severityPrefix(c) + c.body,
       }))
     ),
     null,

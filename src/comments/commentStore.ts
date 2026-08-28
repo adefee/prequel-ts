@@ -67,6 +67,7 @@ export async function addComment(repoRoot: string, data: CommentInput): Promise<
       createdAt: now,
       updatedAt: now,
       status: 'open',
+      // Incoming fields win; we only fill identity + timestamps here.
       ...data,
     };
     all.push(comment);
