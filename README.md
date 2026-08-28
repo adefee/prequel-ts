@@ -8,19 +8,13 @@ A TypeScript fork of [mdesjardins/prequel](https://github.com/mdesjardins/preque
 
 <img width="1285" alt="prequel-ts branch picker" src="public/prequel-ts-branch-choice-screenshot.png" />
 
-## Why
-
-If you review code through GitHub's pull request UI, that layout is comfortable — it puts your brain in a mode that can evaluate and comment efficiently. In the day of agentic coding, that can mean pushing a branch just so you can review it before telling Claude what to change.
-
-Prequel is a local simulator of that interface: a branch into its base, plus staged, unstaged, or untracked files. You comment on the diff and either export those comments or let Claude Code work them through the running server.
-
 ## What's different in this fork
 
 **TypeScript.** The CLI, server, git layer, renderer, and browser modules are TypeScript. Bun still runs the server directly (no transpile step). The page chrome is still EJS under `views/` — those templates were not rewritten.
 
 **pnpm 11+.** Dependencies are installed with pnpm 11 (not Bun as the package manager). Settings live in `pnpm-workspace.yaml`: minimum release age, store integrity checks, and no unapproved lifecycle/build scripts.
 
-**Several projects at once.** Click the header path to open a different repo in *this* tab. The caret next to it saves and lists bookmarked paths (localStorage). One running server backs many browser tabs: each tab carries its own `?repo=<path>`, so switching a tab does not change the others.
+**Change target path in UI, server supports multiple instances/tabs on different paths**  Click the header path to open a different repo in *this* tab. The caret next to it saves and lists bookmarked paths (localStorage). One running server backs many browser tabs: each tab carries its own `?repo=<path>`, so switching a tab does not change the others.
 
 **File filter.** The file tree has a search box that filters the changed-file list as you type (substring match on the path). Empty folders drop out; Escape clears the query.
 
@@ -36,7 +30,7 @@ The original still applies: split/unified views, system light/dark (or `?mode=`)
 
 ## Install
 
-This fork is not the `@mdesjardins/prequel` npm package. Run it from a clone (Bun is the runtime; [pnpm](https://pnpm.io) 11+ installs dependencies and enforces the supply-chain settings in `pnpm-workspace.yaml`).
+This fork differs in install `@mdesjardins/prequel` vs prequel, and isn't the npm package. Clone this repo and run the commands below (Bun is the runtime; [pnpm](https://pnpm.io) 11+ installs dependencies and enforces the supply-chain settings in `pnpm-workspace.yaml`). 
 
 ```bash
 git clone https://github.com/adefee/prequel-ts.git
@@ -44,6 +38,11 @@ cd prequel-ts
 pnpm install
 pnpm build                # bundle the browser modules into public/dist
 pnpm start                # review the current directory
+
+# optional, if you want `prequel <target>` to work in bash
+pnpm link --global
+# to undo the shim
+pnpm unlink --global
 ```
 
 Or point it at another repo:
@@ -55,6 +54,8 @@ pnpm start -- /path/to/repo [--base <ref>] [--port <n>] [--no-open]
 One process can back several tabs on different projects. Each tab's `?repo=` and the header path picker are independent.
 
 ## Closing the loop with Claude
+
+> This is presently unchanged from the original behavior. I don't use this functionality today, but preserved it for others that might.
 
 Instead of copy/pasting the export, install the bundled skill so Claude Code can
 read your comments straight from the running server and resolve each one as it
