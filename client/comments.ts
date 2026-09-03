@@ -110,9 +110,15 @@ function commentCardHtml(c: UiComment, { isRoot }: { isRoot: boolean }): string 
       ? `<span class="comment-lines">Lines ${c.startLine}–${c.endLine}</span>`
       : "";
   const resolved = isRoot && c.status === "resolved";
+  const canPost =
+    isRoot &&
+    !resolved &&
+    (c.side === "old" || c.side === "new") &&
+    (c.author || "user") === "user";
   const tools = isRoot
     ? `<button class="comment-resolve">${resolved ? "Reopen" : "Resolve"}</button>` +
-      `<button class="comment-reply-btn">Reply</button>`
+      `<button class="comment-reply-btn">Reply</button>` +
+      (canPost ? `<button type="button" class="comment-post-pr-btn">Post to PR</button>` : "")
     : "";
   return (
     `<div class="comment" data-comment-id="${c.id}" data-author="${author}">` +
@@ -522,11 +528,12 @@ async function loadComments(): Promise<void> {
   }
 }
 
-// --- imported GitHub PR review comments (read-only context) -----------
+// --- imported PR review comments (read-only context) -------------------
 // Not persisted as prequel Comments: they're fetched fresh each click and
 // exist only in the DOM. "Reply locally" opens the normal compose box at the
-// same line, which posts a normal local comment — nothing is sent to GitHub.
-function prThreadHtml(t: PrCommentThread): string {
+// same line, which posts a normal local comment — nothing is sent to the forge.
+function prThreadHtml(t: PrCommentThread, provider: "github" | "forgejo"): string {
+  const badge = provider === "forgejo" ? "Forgejo review comment" : "GitHub review comment";
   const cards = t.comments
     .map(
       (c) =>
@@ -541,7 +548,7 @@ function prThreadHtml(t: PrCommentThread): string {
     .join("");
   return (
     `<div class="pr-comment-thread" data-pr-path="${escapeHtml(t.path)}" data-pr-side="${t.side}" data-pr-line="${t.line}">` +
-    `<div class="pr-comment-badge">GitHub review comment</div>` +
+    `<div class="pr-comment-badge">${badge}</div>` +
     cards +
     `<button type="button" class="pr-comment-reply-btn">Reply locally</button>` +
     `</div>`
@@ -565,7 +572,7 @@ function waitForDiffReady(): Promise<void> {
   });
 }
 
-function renderPrThread(t: PrCommentThread): void {
+function renderPrThread(t: PrCommentThread, provider: "github" | "forgejo"): void {
   const cell = findAnchorCell(t.path, t.side, t.line);
   if (!cell) {
     return;
@@ -575,7 +582,7 @@ function renderPrThread(t: PrCommentThread): void {
     return;
   }
   const isSplit = isSplitTable(cell.closest("table"));
-  const html = `<tr class="comment-row pr-comment-row">${threadCells(isSplit, t.side, prThreadHtml(t))}</tr>`;
+  const html = `<tr class="comment-row pr-comment-row">${threadCells(isSplit, t.side, prThreadHtml(t, provider))}</tr>`;
   insertionPointAfter(row).insertAdjacentHTML("afterend", html);
 }
 
@@ -583,7 +590,7 @@ function renderPrThread(t: PrCommentThread): void {
 // also persists server-side per repo, so a later session skips the prompt).
 let ghHost: string | null = null;
 
-async function runImportPr(hostOverride?: string): Promise<void> {
+async function runImportPr(opts?: { ghHost?: string; forgeToken?: string }): Promise<void> {
   if (!importPrBtn) {
     return;
   }
@@ -592,23 +599,40 @@ async function runImportPr(hostOverride?: string): Promise<void> {
   document.querySelectorAll(".pr-comment-row").forEach((el) => el.remove());
   try {
     const params = new URLSearchParams({ branch });
-    const host = hostOverride ?? ghHost;
+    const host = opts?.ghHost ?? ghHost;
     if (host) {
       params.set("ghHost", host);
+    }
+    if (opts?.forgeToken) {
+      params.set("forgeToken", opts.forgeToken);
     }
     const res = await fetch(withRepoQuery(`/api/pr-comments?${params}`));
     const data = (await res.json()) as {
       threads?: PrCommentThread[];
+      provider?: "github" | "forgejo";
       ghHost?: string;
       error?: string;
+      needs?: "forgeToken" | "ghHost";
     };
     if (!res.ok) {
+      if (data.needs === "forgeToken") {
+        toast(data.error || "Forgejo token required.", {
+          label: "Set Forgejo token…",
+          fn: () => {
+            const entered = window.prompt("Forgejo / Gitea personal access token:");
+            if (entered?.trim()) {
+              void runImportPr({ forgeToken: entered.trim() });
+            }
+          },
+        });
+        return;
+      }
       toast(data.error || "Could not load PR comments.", {
         label: "Set GH host…",
         fn: () => {
           const entered = window.prompt("GitHub Enterprise hostname (e.g. github.example.com):");
           if (entered?.trim()) {
-            void runImportPr(entered.trim());
+            void runImportPr({ ghHost: entered.trim() });
           }
         },
       });
@@ -617,19 +641,80 @@ async function runImportPr(hostOverride?: string): Promise<void> {
     if (data.ghHost) {
       ghHost = data.ghHost;
     }
+    const provider = data.provider === "forgejo" ? "forgejo" : "github";
     const threads = data.threads ?? [];
     if (!threads.length) {
       toast("No PR review comments found for this branch.");
       return;
     }
     await waitForDiffReady();
-    threads.forEach(renderPrThread);
+    threads.forEach((t) => renderPrThread(t, provider));
     toast(`Imported ${threads.length} PR comment${threads.length === 1 ? "" : "s"}.`);
   } catch {
     toast("Could not load PR comments.");
   } finally {
     importPrBtn.disabled = false;
     importPrBtn.classList.remove("is-busy");
+  }
+}
+
+async function runPostToPr(commentId: string, forgeToken?: string): Promise<void> {
+  const btn = document.querySelector<HTMLButtonElement>(
+    `.comment[data-comment-id="${CSS.escape(commentId)}"] .comment-post-pr-btn`,
+  );
+  if (btn) {
+    btn.disabled = true;
+  }
+  try {
+    const res = await fetch(withRepoQuery("/api/pr-comments/push"), {
+      method: "POST",
+      headers: jsonHeaders(),
+      body: JSON.stringify({
+        commentId,
+        branch: branch || undefined,
+        ...(forgeToken ? { forgeToken } : {}),
+      }),
+    });
+    const data = (await res.json()) as {
+      ok?: boolean;
+      htmlUrl?: string;
+      pullNumber?: number;
+      error?: string;
+      needs?: "forgeToken";
+    };
+    if (!res.ok) {
+      if (data.needs === "forgeToken") {
+        toast(data.error || "Forgejo token required.", {
+          label: "Set Forgejo token…",
+          fn: () => {
+            const entered = window.prompt("Forgejo / Gitea personal access token:");
+            if (entered?.trim()) {
+              void runPostToPr(commentId, entered.trim());
+            }
+          },
+        });
+        return;
+      }
+      toast(data.error || "Could not post comment to PR.");
+      return;
+    }
+    toast(
+      data.pullNumber ? `Posted to PR #${data.pullNumber}.` : "Posted comment to PR.",
+      data.htmlUrl
+        ? {
+            label: "Open",
+            fn: () => {
+              window.open(data.htmlUrl, "_blank", "noopener,noreferrer");
+            },
+          }
+        : undefined,
+    );
+  } catch {
+    toast("Could not post comment to PR.");
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+    }
   }
 }
 
@@ -895,6 +980,17 @@ function attachListeners(): void {
         compose = thread.querySelector(".comment-reply-compose");
       }
       compose?.querySelector<HTMLTextAreaElement>(".comment-input")?.focus();
+      return;
+    }
+
+    const postPr = closestFrom(e.target, ".comment-post-pr-btn");
+    if (postPr) {
+      e.preventDefault();
+      const card = postPr.closest<HTMLElement>(".comment");
+      const id = card?.dataset.commentId;
+      if (id) {
+        void runPostToPr(id);
+      }
       return;
     }
 

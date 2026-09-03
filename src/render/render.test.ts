@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import type { ReviewDiff } from "../git/diff";
 import { highlightDiff } from "./highlighter";
-import { renderDiff } from "./renderer";
+import { renderDiff, renderFileTree } from "./renderer";
 import { annotateWordDiffs, computeWordDiff } from "./wordDiff";
 
 const review: ReviewDiff = {
@@ -78,5 +78,28 @@ describe("render projection", () => {
       oldRanges: [],
       newRanges: [],
     });
+  });
+
+  test("marks test and style paths so the hide toggles can find them", () => {
+    const stub = {
+      status: "modified" as const,
+      isBinary: true,
+      language: null,
+      additions: 0,
+      deletions: 0,
+      mode: null,
+      hunks: [],
+    };
+    const html = renderFileTree({
+      files: [
+        { ...stub, id: "test", oldPath: "src/a.test.ts", newPath: "src/a.test.ts" },
+        { ...stub, id: "css", oldPath: "src/a.css", newPath: "src/a.css" },
+        { ...stub, id: "src", oldPath: "src/a.ts", newPath: "src/a.ts" },
+      ],
+    });
+    expect(html).toMatch(/data-file-path="src\/a\.test\.ts"[^>]*data-test-file/);
+    expect(html).toMatch(/data-file-path="src\/a\.css"[^>]*data-style-file/);
+    expect(html).not.toMatch(/data-file-path="src\/a\.ts"[^>]*data-test-file/);
+    expect(html).not.toMatch(/data-file-path="src\/a\.ts"[^>]*data-style-file/);
   });
 });

@@ -1,6 +1,7 @@
 // Renders a diff model into GitHub-"Files changed"-faithful HTML.
 // Supports unified (inline) and split (side-by-side) views.
 
+import { fileKindAttrs } from "../fileKinds";
 import type {
   FileStatus,
   LineType,
@@ -301,8 +302,16 @@ function renderFileBody(file: RenderFile, view: ViewMode, rev: Rev | null): stri
   return view === "split" ? renderSplitTable(file, ctx) : renderUnifiedTable(file, ctx);
 }
 
+function fileRawPath(file: { newPath?: string | null; oldPath?: string | null }): string {
+  return file.newPath ?? file.oldPath ?? "";
+}
+
+function kindAttrs(file: { newPath?: string | null; oldPath?: string | null }): string {
+  return fileKindAttrs(fileRawPath(file));
+}
+
 function renderFile(file: RenderFile, view: ViewMode, rev: Rev | null): string {
-  const filePath = escapeHtml(file.newPath ?? file.oldPath);
+  const filePath = escapeHtml(fileRawPath(file));
   const renamedFrom =
     file.status === "renamed" && file.oldPath !== file.newPath
       ? `<span class="file-rename">${escapeHtml(file.oldPath)} → </span>`
@@ -315,7 +324,7 @@ function renderFile(file: RenderFile, view: ViewMode, rev: Rev | null): string {
     `<span class="file-deletions">−${file.deletions}</span>`;
 
   return `
-  <div class="file" id="diff-${file.id}" data-path="${filePath}">
+  <div class="file" id="diff-${file.id}" data-file-id="${file.id}" data-path="${filePath}"${kindAttrs(file)}>
     <div class="file-header" data-file-id="${file.id}">
       <button class="collapse-btn" aria-label="Toggle diff" aria-expanded="true">
         <svg class="chevron" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">
@@ -410,10 +419,11 @@ function renderTreeNode(node: TreeNode, depth: number): string {
   const files = [...node.files].sort((a, b) => a.name.localeCompare(b.name));
   for (const { name, file } of files) {
     const pad = 8 + depth * 14 + 14;
+    const treePath = fileRawPath(file);
     html +=
       `<a class="tree-row tree-file-row" href="#diff-${file.id}" data-file-id="${file.id}"` +
-      ` data-file-path="${escapeHtml(file.newPath)}"` +
-      ` style="padding-left:${pad}px" title="${escapeHtml(file.newPath)}">` +
+      ` data-file-path="${escapeHtml(treePath)}"${kindAttrs(file)}` +
+      ` style="padding-left:${pad}px" title="${escapeHtml(treePath)}">` +
       `<span class="tree-status tree-status-${file.status}" aria-hidden="true"></span>` +
       `<span class="tree-name">${escapeHtml(name)}</span>` +
       `<span class="tree-counts"><span class="tree-add">+${file.additions}</span> <span class="tree-del">−${file.deletions}</span></span>` +

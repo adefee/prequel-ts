@@ -1,9 +1,12 @@
-// Read-only fetch of a GitHub PR's line-anchored review comments, via the
-// `gh` CLI. Never writes anything back to GitHub — the UI uses these purely
-// as read-only context for a local prequel comment (see client/comments.ts).
+// Read-only fetch of a PR's line-anchored review comments.
+// GitHub (github.com or an explicit GHE host) goes through `gh`; 
+// we assume other remotes use an API like Forgejo/Gitea HTTP API. 
 import { execFile } from "node:child_process";
 import type { CommentSide } from "../comments/commentStore";
+import { HttpError } from "../errors";
+import { fetchForgejoPrReviewComments, postForgejoReviewComment } from "./forgejoComments";
 import { isSafeGhHost } from "./prConfig";
+import { isGithubDotCom, resolvePushRemote, type PushRemote } from "./pushRemote";
 import { isSafeRefName } from "./repository";
 
 function gh(repoRoot: string, args: string[], ghHost?: string | null): Promise<string> {
@@ -57,6 +60,14 @@ export interface PrCommentThread {
   side: CommentSide;
   line: number;
   comments: PrComment[];
+}
+
+export type PrCommentProvider = "github" | "forgejo";
+
+export interface FetchPrCommentsResult {
+  threads: PrCommentThread[];
+  provider: PrCommentProvider;
+  remote: PushRemote | null;
 }
 
 const RESOLVED_THREADS_QUERY = `
@@ -176,14 +187,11 @@ export function threadsFromReviewComments(
   return threads;
 }
 
-export async function fetchPrReviewComments(
+async function fetchGithubPrReviewComments(
   repoRoot: string,
   branch: string,
   ghHost?: string | null,
 ): Promise<PrCommentThread[]> {
-  if (!isSafeRefName(branch)) {
-    throw new Error("unsafe branch name");
-  }
   const numOut = await gh(repoRoot, ["pr", "view", branch, "--json", "number"], ghHost);
   const { number } = JSON.parse(numOut) as { number: number };
   if (!Number.isInteger(number) || number <= 0) {
@@ -199,4 +207,88 @@ export async function fetchPrReviewComments(
     fetchResolvedCommentIds(repoRoot, nameWithOwner, number, ghHost),
   ]);
   return threadsFromReviewComments(JSON.parse(raw) as RawReviewComment[], resolvedIds);
+}
+
+/** Prefer GitHub when the push remote is github.com, or an explicit GHE host is set. */
+export function choosePrCommentProvider(
+  remote: PushRemote | null,
+  ghHost?: string | null,
+): PrCommentProvider {
+  if (ghHost) {
+    return "github";
+  }
+  if (remote && isGithubDotCom(remote.host)) {
+    return "github";
+  }
+  return "forgejo";
+}
+
+export async function fetchPrReviewComments(
+  repoRoot: string,
+  branch: string,
+  options: {
+    ghHost?: string | null;
+    forgeToken?: string | null;
+  } = {},
+): Promise<FetchPrCommentsResult> {
+  if (!isSafeRefName(branch)) {
+    throw new Error("unsafe branch name");
+  }
+  const remote = await resolvePushRemote(repoRoot, branch);
+  const provider = choosePrCommentProvider(remote, options.ghHost);
+
+  if (provider === "github") {
+    const threads = await fetchGithubPrReviewComments(repoRoot, branch, options.ghHost);
+    return { threads, provider, remote };
+  }
+
+  if (!remote) {
+    throw new HttpError(400, "could not resolve git push remote");
+  }
+  if (!options.forgeToken) {
+    throw new HttpError(401, "Forgejo token required", { needs: "forgeToken" });
+  }
+  const threads = await fetchForgejoPrReviewComments(remote, branch, options.forgeToken);
+  return { threads, provider, remote };
+}
+
+export interface PushLocalCommentInput {
+  path: string;
+  side: "old" | "new";
+  line: number;
+  body: string;
+}
+
+export interface PushLocalCommentResult {
+  provider: "forgejo";
+  pullNumber: number;
+  htmlUrl: string;
+}
+
+/** Post one local line comment to the open Forgejo/Gitea PR for `branch`. */
+export async function pushLocalCommentToPr(
+  repoRoot: string,
+  branch: string,
+  input: PushLocalCommentInput,
+  options: {
+    ghHost?: string | null;
+    forgeToken?: string | null;
+  } = {},
+): Promise<PushLocalCommentResult> {
+  if (!isSafeRefName(branch)) {
+    throw new Error("unsafe branch name");
+  }
+  const remote = await resolvePushRemote(repoRoot, branch);
+  const provider = choosePrCommentProvider(remote, options.ghHost);
+  if (provider === "github") {
+    throw new HttpError(400, "Posting review comments is only supported for Forgejo/Gitea remotes");
+  }
+  if (!remote) {
+    throw new HttpError(400, "could not resolve git push remote");
+  }
+  if (!options.forgeToken) {
+    throw new HttpError(401, "Forgejo token required", { needs: "forgeToken" });
+  }
+  const posted = await postForgejoReviewComment(remote, branch, options.forgeToken, input);
+  return { provider: "forgejo", ...posted };
 }

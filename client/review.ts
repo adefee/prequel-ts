@@ -1,10 +1,11 @@
 // Interactivity: segmented toggles (view/diff), collapse/expand, copy path,
-// "Viewed" state, hunk-context expansion, the project picker, and branch
-// compare pickers. Toggle choices persist in localStorage and are re-applied
-// on loads where the URL doesn't pin them.
+// "Viewed" state, hunk-context expansion, the project picker, branch
+// compare pickers, and file-tree scroll-spy. Toggle choices persist in
+// localStorage and are re-applied on loads where the URL doesn't pin them.
 
 import { closestFrom, currentRepoPath, escapeHtml, withRepoQuery } from "./dom";
 import { initFileFilter } from "./fileFilter";
+import { initTreeSpy, setActiveTreeFile } from "./treeSpy";
 
 /** What `/api/context` returns for a hunk-expansion request. */
 interface ContextResponse {
@@ -211,14 +212,6 @@ function reviewLayout(): HTMLElement | null {
 function markTreeViewed(id: string, viewed: boolean): void {
   const row = document.querySelector(`.tree-file-row[data-file-id="${CSS.escape(id)}"]`);
   row?.classList.toggle("is-viewed", viewed);
-}
-
-function setActiveTreeFile(id: string): void {
-  document
-    .querySelectorAll(".tree-file-row.is-active")
-    .forEach((r) => r.classList.remove("is-active"));
-  const row = document.querySelector(`.tree-file-row[data-file-id="${CSS.escape(id)}"]`);
-  row?.classList.add("is-active");
 }
 
 if (localStorage.getItem(TREE_KEY) === "hidden") {
@@ -653,9 +646,12 @@ initRepoPicker();
 initBranchPickers();
 const treeFilter = document.querySelector<HTMLInputElement>(".tree-filter");
 const fileTree = document.querySelector(".file-tree");
+const hideTests = document.querySelector<HTMLInputElement>(".tree-hide-tests");
+const hideStyles = document.querySelector<HTMLInputElement>(".tree-hide-styles");
 if (treeFilter && fileTree) {
-  initFileFilter(treeFilter, fileTree);
+  initFileFilter(treeFilter, fileTree, { hideTests, hideStyles });
 }
+initTreeSpy();
 
 // --- "Viewed" checkboxes ------------------------------------------------
 // Persist per file id in localStorage and collapse the file.

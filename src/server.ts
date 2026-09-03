@@ -26,8 +26,15 @@ import {
 import { HttpError, messageOf, statusOf } from "./errors";
 import { buildMarkdown, buildJson } from "./export/claudeExport";
 import { parseDiff, inferLanguage, type ReviewDiff } from "./git/diff";
-import { fetchPrReviewComments } from "./git/prComments";
-import { getGhHost, isSafeGhHost, setGhHost } from "./git/prConfig";
+import { fetchPrReviewComments, pushLocalCommentToPr } from "./git/prComments";
+import {
+  getForgeToken,
+  getGhHost,
+  isSafeForgeToken,
+  isSafeGhHost,
+  setForgeToken,
+  setGhHost,
+} from "./git/prConfig";
 import {
   DEFAULT_DIFF_MODE,
   fetchedLabel,
@@ -131,7 +138,13 @@ async function ensureExcluded(repoRoot: string): Promise<void> {
 // --- request/response helpers ---------------------------------------------
 const json = (data: unknown, status = 200): Response => Response.json(data, { status });
 const text = (body: string, status: number): Response => new Response(body, { status });
-const apiError = (err: unknown): Response => json({ error: messageOf(err) }, statusOf(err));
+const apiError = (err: unknown): Response => {
+  const body: Record<string, unknown> = { error: messageOf(err) };
+  if (err instanceof HttpError && err.extras) {
+    Object.assign(body, err.extras);
+  }
+  return json(body, statusOf(err));
+};
 
 // Browser mutations must be same-origin. curl / the skill send neither
 // Sec-Fetch-Site nor Origin and are not a CSRF vector, so they pass.
@@ -573,8 +586,8 @@ export function createApp(options: ServerOptions = {}): (req: Request) => Promis
     return json({ from, eof, lines, html });
   }
 
-  // Read-only: line-anchored review comments from this branch's open GitHub
-  // PR, for the client to show as context next to the matching diff line.
+  // Read-only: line-anchored review comments from this branch's open PR
+  // (GitHub via `gh`, or Forgejo/Gitea via the push remote's HTTP API).
   async function getPrComments(req: Request, url: URL): Promise<Response> {
     const scope = await requireRepo(req, url);
     const repoRoot = scope.repoRoot!;
@@ -594,9 +607,72 @@ export function createApp(options: ServerOptions = {}): (req: Request) => Promis
       }
       await setGhHost(repoRoot, rawHost, commentDir);
     }
+    const rawToken = trimmedString(url.searchParams.get("forgeToken"));
+    if (rawToken) {
+      if (!isSafeForgeToken(rawToken)) {
+        throw new HttpError(400, "invalid Forgejo token");
+      }
+      await setForgeToken(repoRoot, rawToken, commentDir);
+    }
     const ghHost = rawHost || (await getGhHost(repoRoot, commentDir));
-    const threads = await fetchPrReviewComments(repoRoot, branch, ghHost);
-    return json({ threads, ghHost });
+    const forgeToken = rawToken || (await getForgeToken(repoRoot, commentDir));
+    const { threads, provider } = await fetchPrReviewComments(repoRoot, branch, {
+      ghHost,
+      forgeToken,
+    });
+    return json({ threads, provider, ghHost });
+  }
+
+  // Push one local line comment to the open Forgejo/Gitea PR (not GitHub).
+  // The local comment stays the source of truth; this only mirrors it upstream.
+  async function postPrCommentPush(req: Request, url: URL): Promise<Response> {
+    const body = await readJsonBody(req);
+    const scope = await requireRepo(req, url, body);
+    const repoRoot = scope.repoRoot!;
+    const commentId = trimmedString(body.commentId);
+    if (!commentId) {
+      throw new HttpError(400, "commentId required");
+    }
+    const comment = await getComment(repoRoot, commentId);
+    if (!comment) {
+      throw new HttpError(404, "not found");
+    }
+    if (comment.parentId) {
+      throw new HttpError(400, "post root comments only");
+    }
+    if (comment.side !== "old" && comment.side !== "new") {
+      throw new HttpError(400, "only line comments can be posted to a PR");
+    }
+    const branch = (comment.branch && comment.branch.trim()) || trimmedString(body.branch) || null;
+    if (!branch) {
+      throw new HttpError(400, "branch required");
+    }
+    if (!isSafeRefName(branch)) {
+      throw new HttpError(400, "unsafe branch name");
+    }
+
+    const rawToken = trimmedString(body.forgeToken);
+    if (rawToken) {
+      if (!isSafeForgeToken(rawToken)) {
+        throw new HttpError(400, "invalid Forgejo token");
+      }
+      await setForgeToken(repoRoot, rawToken, commentDir);
+    }
+    const forgeToken = rawToken || (await getForgeToken(repoRoot, commentDir));
+    const ghHost = await getGhHost(repoRoot, commentDir);
+    const line = Math.max(comment.startLine, comment.endLine);
+    const result = await pushLocalCommentToPr(
+      repoRoot,
+      branch,
+      {
+        path: comment.filePath,
+        side: comment.side,
+        line,
+        body: comment.body,
+      },
+      { forgeToken, ghHost },
+    );
+    return json({ ok: true, ...result });
   }
 
   async function getCommentList(req: Request, url: URL): Promise<Response> {
@@ -843,6 +919,9 @@ export function createApp(options: ServerOptions = {}): (req: Request) => Promis
         }
         if (pathname === "/api/export") {
           return await postExport(req, url);
+        }
+        if (pathname === "/api/pr-comments/push") {
+          return await postPrCommentPush(req, url);
         }
       }
 

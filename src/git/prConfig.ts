@@ -1,11 +1,16 @@
-// Tiny per-repo settings for the PR-comment importer — currently just the
-// GitHub Enterprise hostname, so it only has to be entered once per repo.
+// Tiny per-repo settings for the PR-comment importer — GitHub Enterprise
+// hostname and Forgejo/Gitea personal access token, each entered once per repo.
 import fs from "node:fs/promises";
 import path from "node:path";
 import { DEFAULT_COMMENT_DIR } from "../comments/commentStore";
 
+interface RepoPrConfig {
+  ghHost?: string;
+  forgeToken?: string;
+}
+
 interface PrConfig {
-  [repoRoot: string]: { ghHost?: string };
+  [repoRoot: string]: RepoPrConfig;
 }
 
 function fileFor(directory: string): string {
@@ -21,6 +26,21 @@ async function readConfig(directory: string): Promise<PrConfig> {
   }
 }
 
+async function writeRepoConfig(
+  repoRoot: string,
+  patch: RepoPrConfig,
+  directory: string,
+): Promise<void> {
+  const dir = directory ?? DEFAULT_COMMENT_DIR;
+  const cfg = await readConfig(dir);
+  cfg[repoRoot] = { ...cfg[repoRoot], ...patch };
+  await fs.mkdir(dir, { recursive: true });
+  const dest = fileFor(dir);
+  const tmp = `${dest}.${process.pid}.tmp`;
+  await fs.writeFile(tmp, JSON.stringify(cfg, null, 2));
+  await fs.rename(tmp, dest);
+}
+
 /** Hostname or hostname:port. Used as `GH_HOST`, so reject anything else. */
 export function isSafeGhHost(host: string): boolean {
   if (!host || host.length > 253) {
@@ -29,6 +49,14 @@ export function isSafeGhHost(host: string): boolean {
   return /^[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?(?:\.[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?)*(?::\d{1,5})?$/.test(
     host,
   );
+}
+
+/** Non-empty PAT without whitespace / control chars. */
+export function isSafeForgeToken(token: string): boolean {
+  if (!token || token.length > 200) {
+    return false;
+  }
+  return /^[A-Za-z0-9._~+/=-]+$/.test(token);
 }
 
 export async function getGhHost(
@@ -47,12 +75,24 @@ export async function setGhHost(
   if (!isSafeGhHost(ghHost)) {
     throw new Error("invalid GitHub host");
   }
-  const dir = directory ?? DEFAULT_COMMENT_DIR;
-  const cfg = await readConfig(dir);
-  cfg[repoRoot] = { ...cfg[repoRoot], ghHost };
-  await fs.mkdir(dir, { recursive: true });
-  const dest = fileFor(dir);
-  const tmp = `${dest}.${process.pid}.tmp`;
-  await fs.writeFile(tmp, JSON.stringify(cfg, null, 2));
-  await fs.rename(tmp, dest);
+  await writeRepoConfig(repoRoot, { ghHost }, directory ?? DEFAULT_COMMENT_DIR);
+}
+
+export async function getForgeToken(
+  repoRoot: string,
+  directory = DEFAULT_COMMENT_DIR,
+): Promise<string | null> {
+  const cfg = await readConfig(directory ?? DEFAULT_COMMENT_DIR);
+  return cfg[repoRoot]?.forgeToken ?? null;
+}
+
+export async function setForgeToken(
+  repoRoot: string,
+  forgeToken: string,
+  directory = DEFAULT_COMMENT_DIR,
+): Promise<void> {
+  if (!isSafeForgeToken(forgeToken)) {
+    throw new Error("invalid Forgejo token");
+  }
+  await writeRepoConfig(repoRoot, { forgeToken }, directory ?? DEFAULT_COMMENT_DIR);
 }

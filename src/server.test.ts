@@ -177,4 +177,32 @@ test("PR comment import requires a branch", async () => {
   const host = await request(app, "/api/pr-comments?branch=main&ghHost=bad%20host");
   expect(host.status).toBe(400);
   expect(await host.json()).toEqual({ error: "invalid GitHub host" });
+
+  const token = await request(app, "/api/pr-comments?branch=main&forgeToken=bad%20token");
+  expect(token.status).toBe(400);
+  expect(await token.json()).toEqual({ error: "invalid Forgejo token" });
+});
+
+test("PR comment push validates comment id and line side", async () => {
+  const { app } = await setup();
+  const missing = await request(app, "/api/pr-comments/push", "POST", {});
+  expect(missing.status).toBe(400);
+  expect(await missing.json()).toEqual({ error: "commentId required" });
+
+  const created = (
+    await json(
+      await request(app, "/api/comments", "POST", {
+        filePath: "a.ts",
+        side: "file",
+        body: "file-level",
+        branch: "main",
+      }),
+    )
+  ).comment;
+
+  const fileLevel = await request(app, "/api/pr-comments/push", "POST", {
+    commentId: created.id,
+  });
+  expect(fileLevel.status).toBe(400);
+  expect(await fileLevel.json()).toEqual({ error: "only line comments can be posted to a PR" });
 });

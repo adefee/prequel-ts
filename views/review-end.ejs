@@ -4,6 +4,14 @@
     <aside class="file-tree-pane" aria-label="Changed files">
       <div class="tree-header">
         <span>Files changed</span>
+        <label class="tree-hide-toggle">
+          <input type="checkbox" class="tree-hide-tests" />
+          Hide test files
+        </label>
+        <label class="tree-hide-toggle">
+          <input type="checkbox" class="tree-hide-styles" />
+          Hide style files
+        </label>
         <input type="search" class="tree-filter" placeholder="Filter files" aria-label="Filter changed files" />
       </div>
       <nav class="file-tree"><%- treeHtml %></nav>
@@ -46,6 +54,90 @@
       if (!el) return;
       el.removeAttribute('data-boot-summary');
       el.innerHTML = '<strong><%= summary.fileCount %></strong> changed <%= summary.fileCount === 1 ? "file" : "files" %> <span class="summary-additions">+<%= summary.additions %></span> <span class="summary-deletions">−<%= summary.deletions %></span>';
+    })();
+    (function () {
+      function bindHide(selector, htmlClass, key) {
+        var cb = document.querySelector(selector);
+        if (!cb) return;
+        function apply() {
+          document.documentElement.classList.toggle(htmlClass, cb.checked);
+          try { localStorage.setItem(key, cb.checked ? 'hidden' : 'shown'); } catch (e) {}
+          document.dispatchEvent(new Event('prequel:files-changed'));
+        }
+        try { cb.checked = localStorage.getItem(key) === 'hidden'; } catch (e) {}
+        cb.addEventListener('change', apply);
+        apply();
+      }
+      bindHide('.tree-hide-tests', 'hide-test-files', 'prequel:test-files');
+      bindHide('.tree-hide-styles', 'hide-style-files', 'prequel:style-files');
+      // Restore the search box early so the typed query is visible before modules load;
+      // client/fileFilter.ts re-applies the filter once it initializes.
+      var filter = document.querySelector('.tree-filter');
+      if (filter) {
+        try {
+          var saved = localStorage.getItem('prequel:file-filter');
+          if (saved != null) filter.value = saved;
+        } catch (e) {}
+      }
+    })();
+    (function () {
+      if (document.documentElement.dataset.treeSpy) return;
+      var files = document.querySelectorAll('.file');
+      if (!files.length || !document.querySelector('.file-tree')) return;
+      document.documentElement.dataset.treeSpy = '1';
+      var last = '';
+      var ticking = false;
+      function threshold() {
+        return (parseInt(getComputedStyle(document.documentElement).getPropertyValue('--subnav-h'), 10) || 62) + 8;
+      }
+      function idOf(el) {
+        return el.getAttribute('data-file-id') || (el.querySelector('[data-file-id]') || {}).getAttribute('data-file-id') || '';
+      }
+      function activate(id) {
+        if (!id || id === last) return;
+        last = id;
+        document.querySelectorAll('.tree-file-row.is-active').forEach(function (r) {
+          r.classList.remove('is-active');
+          r.removeAttribute('aria-current');
+        });
+        var row = document.querySelector('.tree-file-row[data-file-id="' + CSS.escape(id) + '"]');
+        if (!row) return;
+        row.classList.add('is-active');
+        row.setAttribute('aria-current', 'true');
+        var dir = row.closest('.tree-dir');
+        while (dir) {
+          dir.classList.remove('is-collapsed');
+          dir = dir.parentElement && dir.parentElement.closest('.tree-dir');
+        }
+        var pane = row.closest('.file-tree-pane');
+        if (!pane) return;
+        var p = pane.getBoundingClientRect();
+        var r = row.getBoundingClientRect();
+        if (r.top < p.top + 8) pane.scrollTop += r.top - p.top - 8;
+        else if (r.bottom > p.bottom - 8) pane.scrollTop += r.bottom - p.bottom + 8;
+      }
+      function apply() {
+        ticking = false;
+        var t = threshold();
+        var current = null;
+        for (var i = 0; i < files.length; i++) {
+          var el = files[i];
+          if (!el.getClientRects().length) continue;
+          if (current === null || el.getBoundingClientRect().top <= t) current = idOf(el);
+          else break;
+        }
+        activate(current);
+      }
+      function onScroll() {
+        if (!ticking) {
+          ticking = true;
+          requestAnimationFrame(apply);
+        }
+      }
+      window.addEventListener('scroll', onScroll, { passive: true });
+      window.addEventListener('resize', onScroll);
+      document.addEventListener('prequel:files-changed', apply);
+      apply();
     })();
   </script>
 

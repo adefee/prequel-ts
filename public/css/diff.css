@@ -784,6 +784,19 @@ html.is-loading body::after {
   padding: 4px 8px 8px;
 }
 
+.tree-hide-toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 400;
+  cursor: pointer;
+  user-select: none;
+}
+
+.tree-hide-toggle input {
+  margin: 0;
+}
+
 .tree-filter {
   width: 100%;
   box-sizing: border-box;
@@ -809,7 +822,19 @@ html.is-loading body::after {
 }
 
 .tree-row.is-filtered-out,
-.tree-dir.is-filtered-out {
+.tree-dir.is-filtered-out,
+.file.is-test-hidden,
+.file.is-style-hidden,
+html.hide-test-files .tree-file-row[data-test-file],
+html.hide-test-files .file[data-test-file],
+html.hide-style-files .tree-file-row[data-style-file],
+html.hide-style-files .file[data-style-file],
+html.hide-test-files:not(.hide-style-files)
+  .tree-dir:not(:has(.tree-file-row:not([data-test-file]))),
+html.hide-style-files:not(.hide-test-files)
+  .tree-dir:not(:has(.tree-file-row:not([data-style-file]))),
+html.hide-test-files.hide-style-files
+  .tree-dir:not(:has(.tree-file-row:not([data-test-file]):not([data-style-file]))) {
   display: none;
 }
 
@@ -920,6 +945,7 @@ html.is-loading body::after {
 
 .tree-file-row.is-active {
   background-color: var(--bgColor-accent-muted, #ddf4ff);
+  box-shadow: inset 2px 0 0 var(--borderColor-accent-emphasis, #0969da);
 }
 
 /* file-tree toggle button in the subnav */
@@ -1585,7 +1611,8 @@ html.is-loading body::after {
 }
 
 .comment-resolve,
-.comment-reply-btn {
+.comment-reply-btn,
+.comment-post-pr-btn {
   border: 0;
   background: transparent;
   padding: 0;
@@ -1594,8 +1621,13 @@ html.is-loading body::after {
   cursor: pointer;
 }
 .comment-resolve:hover,
-.comment-reply-btn:hover {
+.comment-reply-btn:hover,
+.comment-post-pr-btn:hover {
   color: var(--fgColor-accent, #0969da);
+}
+.comment-post-pr-btn:disabled {
+  opacity: 0.5;
+  cursor: default;
 }
 
 .comment-resolved-pill {
@@ -1616,7 +1648,7 @@ html.is-loading body::after {
   opacity: 1;
 }
 
-/* --- imported GitHub PR review comments: read-only context, distinct from
+/* --- imported PR review comments: read-only context, distinct from
    local comment threads (purple accent instead of the default border) --- */
 .pr-comment-thread {
   max-width: 900px;

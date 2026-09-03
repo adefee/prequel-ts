@@ -2,7 +2,7 @@
 
 _Review it before it's a pull request._
 
-A TypeScript fork of [mdesjardins/prequel](https://github.com/mdesjardins/prequel). Same idea: a local web app that renders a Git repo's diff in a UI that looks like GitHub's Pull Request **Files changed** tab, with comments you can hand to Claude. This fork adds multi-project tabs, branch picking, GitHub PR comment import, and tighter git/security behavior.
+A TypeScript fork of [mdesjardins/prequel](https://github.com/mdesjardins/prequel). Same idea: a local web app that renders a Git repo's diff in a UI that looks like GitHub's Pull Request **Files changed** tab, with comments you can hand to Claude. This fork adds multi-project tabs, branch picking, GitHub/Forgejo PR comment import, and tighter git/security behavior.
 
 <img width="1285" alt="prequel-ts Files changed review" src="public/prequel-ts-screenshot.png" />
 
@@ -22,7 +22,7 @@ A TypeScript fork of [mdesjardins/prequel](https://github.com/mdesjardins/preque
 
 **Fetch freshness.** Each branch option shows when its upstream was last fetched (`fetched 12m ago`, `no remote`, …). Hover for the exact time and the tracking ref.
 
-**GitHub PR comments.** **Import PR comments** pulls line-anchored review threads from the current head branch's open GitHub PR (via the [`gh`](https://cli.github.com) CLI) and shows them next to the matching diff line. Reply locally opens a normal prequel comment at that line — nothing is written back to GitHub. Already-resolved GitHub threads are skipped when GraphQL allows it. GitHub Enterprise hosts can be saved once per repo.
+**PR comments.** **Import PR comments** pulls line-anchored review threads from the current head branch's open PR and shows them next to the matching diff line. For `github.com` remotes (or when a GitHub Enterprise host is saved) this uses the [`gh`](https://cli.github.com) CLI; otherwise it uses the Forgejo/Gitea HTTP API against the repo's **git push remote** (so a Tailscale `pushurl` is preferred over a public fetch URL). Reply locally opens a normal prequel comment at that line. On Forgejo/Gitea remotes, open local line comments also get **Post to PR**, which creates a `COMMENT` review with that inline note — the local comment stays; nothing is auto-pushed. Already-resolved GitHub threads are skipped when GraphQL allows it. GHE hostnames and Forgejo PATs can each be saved once per repo in `~/.prequel/pr-config.json`.
 
 **Hardening.** Comment markdown is allowlist-sanitized before it is interpolated as HTML. User-supplied git refs are rejected unless they are a real, safe commit name. Mutations require same-origin. Request bodies are size-capped. Static files cannot escape their roots. Paths with NULs are refused. The server binds loopback-only. The Claude skill installer refuses to write through a symlink.
 
@@ -55,7 +55,7 @@ pnpm start -- /path/to/repo [--base <ref>] [--port <n>] [--no-open]
 
 One process can back several tabs on different projects. Each tab's `?repo=` and the header path picker are independent.
 
-Importing GitHub PR comments also needs [`gh`](https://cli.github.com) on your `PATH` and an authenticated session (`gh auth login`). That is optional for everything else.
+Importing GitHub PR comments needs [`gh`](https://cli.github.com) on your `PATH` and an authenticated session (`gh auth login`). Forgejo/Gitea imports need a personal access token (prompted on first import and remembered per repo). Both are optional for everything else.
 
 ## Comments
 
@@ -63,7 +63,7 @@ Hover `+` on a line (or the file-header button) to leave a comment. Markdown is 
 
 **Export for Claude** writes open user comments to `<repo>/.prequel/` and copies the payload to the clipboard. **Clear** drops the current branch's comments (with undo) so the next review round starts clean.
 
-**Import PR comments** fetches review comments from the open GitHub PR for the selected head branch and anchors them as read-only cards. They are not stored as prequel comments. **Reply locally** opens the normal compose box at that line. If `gh` cannot see the host (typical for GitHub Enterprise), the toast offers **Set GH host…**; that hostname is remembered in `~/.prequel/pr-config.json` for the repo.
+**Import PR comments** fetches review comments from the open PR for the selected head branch and anchors them as read-only cards. They are not stored as prequel comments. **Reply locally** opens the normal compose box at that line. **Post to PR** (on open local line comments, Forgejo/Gitea remotes only) mirrors that comment upstream as a review comment; the local copy remains. If auth or host discovery fails, the toast offers **Set GH host…** or **Set Forgejo token…** as appropriate; values are remembered in `~/.prequel/pr-config.json` for the repo.
 
 ## Closing the loop with Claude
 
@@ -141,8 +141,10 @@ src/server.ts                  Bun.serve routes: page, /api/*, SSE, static files
 src/errors.ts                  errors that carry an HTTP status
 src/git/repository.ts          git CLI wrapper: refs, diff generation, blob lines
 src/git/diff.ts                raw patch text -> diff model
-src/git/prComments.ts          read-only GitHub PR review-comment fetch (`gh`)
-src/git/prConfig.ts            per-repo GitHub host (Enterprise)
+src/git/prComments.ts          PR review-comment fetch/push orchestration
+src/git/forgejoComments.ts     Forgejo/Gitea review-comment fetch + post
+src/git/pushRemote.ts          resolve git push remote → forge API base / owner/repo
+src/git/prConfig.ts            per-repo GitHub host + Forgejo token
 src/render/renderer.ts         diff model -> GitHub-faithful HTML (unified + split)
 src/render/highlighter.ts      Shiki dual-theme syntax highlighting + word-diff overlay
 src/render/wordDiff.ts         intra-line (word-level) diff ranges
