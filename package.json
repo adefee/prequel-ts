@@ -1,6 +1,6 @@
 {
   "name": "@adefee/prequel-ts",
-  "version": "0.3.1",
+  "version": "1.0.0",
   "description": "Review it before it's a pull request — a local, GitHub-style diff reviewer (TypeScript fork)",
   "keywords": [
     "cli",
