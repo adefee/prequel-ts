@@ -28,13 +28,15 @@ import { buildMarkdown, buildJson } from "./export/claudeExport";
 import { parseDiff, inferLanguage, type ReviewDiff } from "./git/diff";
 import { fetchPrReviewComments, pushLocalCommentToPr } from "./git/prComments";
 import {
-  getForgeToken,
   getGhHost,
-  isSafeForgeToken,
+  getProviderToken,
   isSafeGhHost,
-  setForgeToken,
+  isSafeProviderToken,
   setGhHost,
+  setProviderToken,
 } from "./git/prConfig";
+import { resolvePrCommentsProvider } from "./git/prProviders";
+import { resolvePushRemote } from "./git/pushRemote";
 import {
   DEFAULT_DIFF_MODE,
   fetchedLabel,
@@ -586,8 +588,8 @@ export function createApp(options: ServerOptions = {}): (req: Request) => Promis
     return json({ from, eof, lines, html });
   }
 
-  // Read-only: line-anchored review comments from this branch's open PR
-  // (GitHub via `gh`, or Forgejo/Gitea via the push remote's HTTP API).
+  // Read-only: line-anchored review comments from this branch's open PR,
+  // via the provider that matches the git push remote (GitHub, Forgejo, …).
   async function getPrComments(req: Request, url: URL): Promise<Response> {
     const scope = await requireRepo(req, url);
     const repoRoot = scope.repoRoot!;
@@ -598,8 +600,6 @@ export function createApp(options: ServerOptions = {}): (req: Request) => Promis
     if (!isSafeRefName(branch)) {
       throw new HttpError(400, "unsafe branch name");
     }
-    // A passed ghHost (e.g. a GHE hostname) is remembered per repo so it only
-    // has to be typed once; omit it to reuse whatever was last saved.
     const rawHost = trimmedString(url.searchParams.get("ghHost"));
     if (rawHost) {
       if (!isSafeGhHost(rawHost)) {
@@ -607,23 +607,36 @@ export function createApp(options: ServerOptions = {}): (req: Request) => Promis
       }
       await setGhHost(repoRoot, rawHost, commentDir);
     }
-    const rawToken = trimmedString(url.searchParams.get("forgeToken"));
-    if (rawToken) {
-      if (!isSafeForgeToken(rawToken)) {
-        throw new HttpError(400, "invalid Forgejo token");
-      }
-      await setForgeToken(repoRoot, rawToken, commentDir);
-    }
     const ghHost = rawHost || (await getGhHost(repoRoot, commentDir));
-    const forgeToken = rawToken || (await getForgeToken(repoRoot, commentDir));
-    const { threads, provider } = await fetchPrReviewComments(repoRoot, branch, {
+    const remote = await resolvePushRemote(repoRoot, branch);
+    const provider = resolvePrCommentsProvider(remote, { ghHost });
+
+    // Accept `token` (preferred) or legacy `forgeToken`.
+    const rawToken =
+      trimmedString(url.searchParams.get("token")) ||
+      trimmedString(url.searchParams.get("forgeToken"));
+    if (rawToken) {
+      if (!isSafeProviderToken(rawToken)) {
+        throw new HttpError(400, "invalid provider token");
+      }
+      await setProviderToken(repoRoot, provider.id, rawToken, commentDir);
+    }
+    const token = rawToken || (await getProviderToken(repoRoot, provider.id, commentDir));
+    const { threads, providerLabel, canPush } = await fetchPrReviewComments(repoRoot, branch, {
       ghHost,
-      forgeToken,
+      token,
     });
-    return json({ threads, provider, ghHost });
+    return json({
+      threads,
+      provider: provider.id,
+      providerLabel,
+      canPush,
+      ghHost,
+      auth: provider.auth,
+    });
   }
 
-  // Push one local line comment to the open Forgejo/Gitea PR (not GitHub).
+  // Push one local line comment via the resolved provider (when canPush).
   // The local comment stays the source of truth; this only mirrors it upstream.
   async function postPrCommentPush(req: Request, url: URL): Promise<Response> {
     const body = await readJsonBody(req);
@@ -651,15 +664,18 @@ export function createApp(options: ServerOptions = {}): (req: Request) => Promis
       throw new HttpError(400, "unsafe branch name");
     }
 
-    const rawToken = trimmedString(body.forgeToken);
-    if (rawToken) {
-      if (!isSafeForgeToken(rawToken)) {
-        throw new HttpError(400, "invalid Forgejo token");
-      }
-      await setForgeToken(repoRoot, rawToken, commentDir);
-    }
-    const forgeToken = rawToken || (await getForgeToken(repoRoot, commentDir));
     const ghHost = await getGhHost(repoRoot, commentDir);
+    const remote = await resolvePushRemote(repoRoot, branch);
+    const provider = resolvePrCommentsProvider(remote, { ghHost });
+
+    const rawToken = trimmedString(body.token) || trimmedString(body.forgeToken);
+    if (rawToken) {
+      if (!isSafeProviderToken(rawToken)) {
+        throw new HttpError(400, "invalid provider token");
+      }
+      await setProviderToken(repoRoot, provider.id, rawToken, commentDir);
+    }
+    const token = rawToken || (await getProviderToken(repoRoot, provider.id, commentDir));
     const line = Math.max(comment.startLine, comment.endLine);
     const result = await pushLocalCommentToPr(
       repoRoot,
@@ -670,7 +686,7 @@ export function createApp(options: ServerOptions = {}): (req: Request) => Promis
         line,
         body: comment.body,
       },
-      { forgeToken, ghHost },
+      { token, ghHost },
     );
     return json({ ok: true, ...result });
   }

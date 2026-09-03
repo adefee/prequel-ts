@@ -63,7 +63,12 @@ async function forgeRequest<T>(
     throw new HttpError(502, err instanceof Error ? err.message : "Forgejo request failed");
   }
   if (res.status === 401 || res.status === 403) {
-    throw new HttpError(401, "Forgejo authentication failed", { needs: "forgeToken" });
+    throw new HttpError(401, "Forgejo authentication failed", {
+      needs: "token",
+      provider: "forgejo",
+      authLabel: "Set Forgejo token…",
+      authPrompt: "Forgejo / Gitea personal access token:",
+    });
   }
   if (!res.ok) {
     const text = (await res.text()).trim();

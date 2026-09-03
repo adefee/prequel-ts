@@ -180,7 +180,7 @@ test("PR comment import requires a branch", async () => {
 
   const token = await request(app, "/api/pr-comments?branch=main&forgeToken=bad%20token");
   expect(token.status).toBe(400);
-  expect(await token.json()).toEqual({ error: "invalid Forgejo token" });
+  expect(await token.json()).toEqual({ error: "invalid provider token" });
 });
 
 test("PR comment push validates comment id and line side", async () => {

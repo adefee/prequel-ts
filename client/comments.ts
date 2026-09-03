@@ -532,8 +532,8 @@ async function loadComments(): Promise<void> {
 // Not persisted as prequel Comments: they're fetched fresh each click and
 // exist only in the DOM. "Reply locally" opens the normal compose box at the
 // same line, which posts a normal local comment — nothing is sent to the forge.
-function prThreadHtml(t: PrCommentThread, provider: "github" | "forgejo"): string {
-  const badge = provider === "forgejo" ? "Forgejo review comment" : "GitHub review comment";
+function prThreadHtml(t: PrCommentThread, providerLabel: string): string {
+  const badge = `${providerLabel} review comment`;
   const cards = t.comments
     .map(
       (c) =>
@@ -548,7 +548,7 @@ function prThreadHtml(t: PrCommentThread, provider: "github" | "forgejo"): strin
     .join("");
   return (
     `<div class="pr-comment-thread" data-pr-path="${escapeHtml(t.path)}" data-pr-side="${t.side}" data-pr-line="${t.line}">` +
-    `<div class="pr-comment-badge">${badge}</div>` +
+    `<div class="pr-comment-badge">${escapeHtml(badge)}</div>` +
     cards +
     `<button type="button" class="pr-comment-reply-btn">Reply locally</button>` +
     `</div>`
@@ -572,7 +572,7 @@ function waitForDiffReady(): Promise<void> {
   });
 }
 
-function renderPrThread(t: PrCommentThread, provider: "github" | "forgejo"): void {
+function renderPrThread(t: PrCommentThread, providerLabel: string): void {
   const cell = findAnchorCell(t.path, t.side, t.line);
   if (!cell) {
     return;
@@ -582,7 +582,7 @@ function renderPrThread(t: PrCommentThread, provider: "github" | "forgejo"): voi
     return;
   }
   const isSplit = isSplitTable(cell.closest("table"));
-  const html = `<tr class="comment-row pr-comment-row">${threadCells(isSplit, t.side, prThreadHtml(t, provider))}</tr>`;
+  const html = `<tr class="comment-row pr-comment-row">${threadCells(isSplit, t.side, prThreadHtml(t, providerLabel))}</tr>`;
   insertionPointAfter(row).insertAdjacentHTML("afterend", html);
 }
 
@@ -590,7 +590,44 @@ function renderPrThread(t: PrCommentThread, provider: "github" | "forgejo"): voi
 // also persists server-side per repo, so a later session skips the prompt).
 let ghHost: string | null = null;
 
-async function runImportPr(opts?: { ghHost?: string; forgeToken?: string }): Promise<void> {
+type AuthNeed = "token" | "ghHost" | "forgeToken";
+
+interface PrAuthMeta {
+  toastLabel?: string;
+  prompt?: string;
+}
+
+function promptForAuth(
+  needs: AuthNeed | undefined,
+  auth: PrAuthMeta | undefined,
+  onToken: (token: string) => void,
+  onGhHost: (host: string) => void,
+): { label: string; fn: () => void } | undefined {
+  if (needs === "token" || needs === "forgeToken") {
+    return {
+      label: auth?.toastLabel || "Set token…",
+      fn: () => {
+        const entered = window.prompt(auth?.prompt || "Personal access token:");
+        if (entered?.trim()) {
+          onToken(entered.trim());
+        }
+      },
+    };
+  }
+  return {
+    label: auth?.toastLabel || "Set GH host…",
+    fn: () => {
+      const entered = window.prompt(
+        auth?.prompt || "GitHub Enterprise hostname (e.g. github.example.com):",
+      );
+      if (entered?.trim()) {
+        onGhHost(entered.trim());
+      }
+    },
+  };
+}
+
+async function runImportPr(opts?: { ghHost?: string; token?: string }): Promise<void> {
   if (!importPrBtn) {
     return;
   }
@@ -603,52 +640,46 @@ async function runImportPr(opts?: { ghHost?: string; forgeToken?: string }): Pro
     if (host) {
       params.set("ghHost", host);
     }
-    if (opts?.forgeToken) {
-      params.set("forgeToken", opts.forgeToken);
+    if (opts?.token) {
+      params.set("token", opts.token);
     }
     const res = await fetch(withRepoQuery(`/api/pr-comments?${params}`));
     const data = (await res.json()) as {
       threads?: PrCommentThread[];
-      provider?: "github" | "forgejo";
+      provider?: string;
+      providerLabel?: string;
       ghHost?: string;
       error?: string;
-      needs?: "forgeToken" | "ghHost";
+      needs?: AuthNeed;
+      auth?: PrAuthMeta;
+      authLabel?: string;
+      authPrompt?: string;
     };
     if (!res.ok) {
-      if (data.needs === "forgeToken") {
-        toast(data.error || "Forgejo token required.", {
-          label: "Set Forgejo token…",
-          fn: () => {
-            const entered = window.prompt("Forgejo / Gitea personal access token:");
-            if (entered?.trim()) {
-              void runImportPr({ forgeToken: entered.trim() });
-            }
-          },
-        });
-        return;
-      }
-      toast(data.error || "Could not load PR comments.", {
-        label: "Set GH host…",
-        fn: () => {
-          const entered = window.prompt("GitHub Enterprise hostname (e.g. github.example.com):");
-          if (entered?.trim()) {
-            void runImportPr({ ghHost: entered.trim() });
-          }
-        },
-      });
+      const auth = data.auth ?? {
+        toastLabel: data.authLabel,
+        prompt: data.authPrompt,
+      };
+      const action = promptForAuth(
+        data.needs,
+        auth,
+        (token) => void runImportPr({ token }),
+        (h) => void runImportPr({ ghHost: h }),
+      );
+      toast(data.error || "Could not load PR comments.", action);
       return;
     }
     if (data.ghHost) {
       ghHost = data.ghHost;
     }
-    const provider = data.provider === "forgejo" ? "forgejo" : "github";
+    const providerLabel = data.providerLabel || data.provider || "PR";
     const threads = data.threads ?? [];
     if (!threads.length) {
       toast("No PR review comments found for this branch.");
       return;
     }
     await waitForDiffReady();
-    threads.forEach((t) => renderPrThread(t, provider));
+    threads.forEach((t) => renderPrThread(t, providerLabel));
     toast(`Imported ${threads.length} PR comment${threads.length === 1 ? "" : "s"}.`);
   } catch {
     toast("Could not load PR comments.");
@@ -658,7 +689,7 @@ async function runImportPr(opts?: { ghHost?: string; forgeToken?: string }): Pro
   }
 }
 
-async function runPostToPr(commentId: string, forgeToken?: string): Promise<void> {
+async function runPostToPr(commentId: string, token?: string): Promise<void> {
   const btn = document.querySelector<HTMLButtonElement>(
     `.comment[data-comment-id="${CSS.escape(commentId)}"] .comment-post-pr-btn`,
   );
@@ -672,7 +703,7 @@ async function runPostToPr(commentId: string, forgeToken?: string): Promise<void
       body: JSON.stringify({
         commentId,
         branch: branch || undefined,
-        ...(forgeToken ? { forgeToken } : {}),
+        ...(token ? { token } : {}),
       }),
     });
     const data = (await res.json()) as {
@@ -680,19 +711,24 @@ async function runPostToPr(commentId: string, forgeToken?: string): Promise<void
       htmlUrl?: string;
       pullNumber?: number;
       error?: string;
-      needs?: "forgeToken";
+      needs?: AuthNeed;
+      auth?: PrAuthMeta;
+      authLabel?: string;
+      authPrompt?: string;
     };
     if (!res.ok) {
-      if (data.needs === "forgeToken") {
-        toast(data.error || "Forgejo token required.", {
-          label: "Set Forgejo token…",
-          fn: () => {
-            const entered = window.prompt("Forgejo / Gitea personal access token:");
-            if (entered?.trim()) {
-              void runPostToPr(commentId, entered.trim());
-            }
-          },
-        });
+      const auth = data.auth ?? {
+        toastLabel: data.authLabel,
+        prompt: data.authPrompt,
+      };
+      if (data.needs === "token" || data.needs === "forgeToken") {
+        const action = promptForAuth(
+          data.needs,
+          auth,
+          (t) => void runPostToPr(commentId, t),
+          () => undefined,
+        );
+        toast(data.error || "Token required.", action);
         return;
       }
       toast(data.error || "Could not post comment to PR.");

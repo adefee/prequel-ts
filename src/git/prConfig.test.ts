@@ -5,10 +5,12 @@ import path from "node:path";
 import {
   getForgeToken,
   getGhHost,
+  getProviderToken,
   isSafeForgeToken,
   isSafeGhHost,
   setForgeToken,
   setGhHost,
+  setProviderToken,
 } from "./prConfig";
 
 const dirs: string[] = [];
@@ -57,7 +59,10 @@ describe("pr-config persistence", () => {
     expect(await getForgeToken("/tmp/app", directory)).toBe("forge-pat-xyz");
     expect(await getGhHost("/tmp/app", directory)).toBe("github.example.com");
     await expect(setForgeToken("/tmp/app", "bad token", directory)).rejects.toThrow(
-      "invalid Forgejo token",
+      "invalid provider token",
     );
+    await setProviderToken("/tmp/app", "gitlab", "glpat-xyz", directory);
+    expect(await getProviderToken("/tmp/app", "gitlab", directory)).toBe("glpat-xyz");
+    expect(await getProviderToken("/tmp/app", "forgejo", directory)).toBe("forge-pat-xyz");
   });
 });

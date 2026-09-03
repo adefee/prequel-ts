@@ -63,7 +63,15 @@ Hover `+` on a line (or the file-header button) to leave a comment. Markdown is 
 
 **Export for Claude** writes open user comments to `<repo>/.prequel/` and copies the payload to the clipboard. **Clear** drops the current branch's comments (with undo) so the next review round starts clean.
 
-**Import PR comments** fetches review comments from the open PR for the selected head branch and anchors them as read-only cards. They are not stored as prequel comments. **Reply locally** opens the normal compose box at that line. **Post to PR** (on open local line comments, Forgejo/Gitea remotes only) mirrors that comment upstream as a review comment; the local copy remains. If auth or host discovery fails, the toast offers **Set GH host…** or **Set Forgejo token…** as appropriate; values are remembered in `~/.prequel/pr-config.json` for the repo.
+**Import PR comments** fetches review comments from the open PR for the selected head branch and anchors them as read-only cards. They are not stored as prequel comments. **Reply locally** opens the normal compose box at that line. **Post to PR** (on open local line comments, when the active provider supports push — Forgejo/Gitea today) mirrors that comment upstream as a review comment; the local copy remains. If auth or host discovery fails, the toast prompts using the provider's auth copy; values are remembered in `~/.prequel/pr-config.json` for the repo.
+
+### Adding a forge provider
+
+PR import/push is provider-based under [`src/git/prProviders/`](src/git/prProviders/). Built-ins: **GitHub** (`gh`, matches `github.com` or an explicit GHE host) and **Forgejo** (HTTP API, catch-all for other push remotes). To add GitLab (or similar):
+
+1. Implement `PrCommentsProvider` (`id`, `label`, `matches`, `fetchComments`, optional `pushComment` / `canPush`, `auth`).
+2. Call `registerPrCommentsProvider(yourProvider)` so it runs **after** GitHub and **before** the Forgejo fallback (see `registry.ts`).
+3. Store PATs with `setProviderToken(repoRoot, "gitlab", token)` — keys live under `tokens.<id>` in `pr-config.json`.
 
 ## Closing the loop with Claude
 
@@ -141,10 +149,11 @@ src/server.ts                  Bun.serve routes: page, /api/*, SSE, static files
 src/errors.ts                  errors that carry an HTTP status
 src/git/repository.ts          git CLI wrapper: refs, diff generation, blob lines
 src/git/diff.ts                raw patch text -> diff model
-src/git/prComments.ts          PR review-comment fetch/push orchestration
-src/git/forgejoComments.ts     Forgejo/Gitea review-comment fetch + post
+src/git/prComments.ts          facade: resolve provider → fetch / push
+src/git/prProviders/           provider interface + GitHub / Forgejo adapters
+src/git/forgejoComments.ts     Forgejo/Gitea HTTP review-comment fetch + post
 src/git/pushRemote.ts          resolve git push remote → forge API base / owner/repo
-src/git/prConfig.ts            per-repo GitHub host + Forgejo token
+src/git/prConfig.ts            per-repo GHE host + per-provider tokens
 src/render/renderer.ts         diff model -> GitHub-faithful HTML (unified + split)
 src/render/highlighter.ts      Shiki dual-theme syntax highlighting + word-diff overlay
 src/render/wordDiff.ts         intra-line (word-level) diff ranges
